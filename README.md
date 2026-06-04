@@ -4,12 +4,13 @@ A FastAPI-based web service to analyze email text for phishing indicators and th
 
 ## Features
 
-- **Email Analysis**: Paste email text and receive a phishing risk score (0-100)
+- **Email Analysis**: Paste email text OR upload .eml files to analyze
+- **Metadata Extraction**: Automatically extracts sender, subject, and body from .eml files
 - **Indicators**: Detects suspicious keywords, urgency language, credential harvesting attempts, brand impersonation, and more
 - **Domain Intelligence**: WHOIS domain age lookup, DNS record validation, suspicious TLD detection
 - **Explanations**: Clear, actionable recommendations for each detected indicator
-- **Web UI**: Clean, modern interface for easy email analysis
-- **Tests**: Comprehensive pytest suite with automated test reporting
+- **Web UI**: Clean, modern interface with tabbed input (text/file upload) and drag-and-drop support
+- **Tests**: Comprehensive pytest suite with automated test reporting (9+ tests)
 
 ## Quick Start
 
@@ -75,6 +76,34 @@ Analyze email text for phishing indicators.
     }
   ],
   "explanation": "..."
+}
+```
+
+### POST /analyze-eml
+
+Upload and analyze a .eml email file.
+
+**Request**: Form data with `file` field (multipart/form-data)
+```
+POST /analyze-eml
+Content-Type: multipart/form-data
+file: <.eml file>
+```
+
+**Response**: Same as `/analyze` but includes `metadata` object:
+```json
+{
+  "urls": [...],
+  "score": 75,
+  "confidence": 90,
+  "sender": "phisher@fake.com",
+  "indicators": [...],
+  "explanation": "...",
+  "metadata": {
+    "sender": "phisher@fake.com",
+    "subject": "Urgent: Verify your account",
+    "body_preview": "Click here to verify your PayPal account..."
+  }
 }
 ```
 

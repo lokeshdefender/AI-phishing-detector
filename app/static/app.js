@@ -1,5 +1,20 @@
 const el = (id) => document.getElementById(id);
 const analyzeBtn = el('analyzeBtn');
+const analyzeFileBtn = el('analyzeFileBtn');
+const fileInput = el('fileInput');
+const dropZone = el('dropZone');
+let selectedFile = null;
+
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tabId = btn.getAttribute('data-tab');
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    el(tabId).classList.add('active');
+  });
+});
 
 function verdictFromScore(score){
   if(score >= 70) return {label: 'High Risk', cls: 'high'};
@@ -7,6 +22,47 @@ function verdictFromScore(score){
   return {label: 'Low Risk', cls: 'low'};
 }
 
+function displayResult(data) {
+  el('scoreVal').textContent = data.score;
+  el('confidenceVal').textContent = data.confidence ?? 0;
+  el('senderVal').textContent = data.sender || 'unknown';
+  const v = verdictFromScore(data.score);
+  const verdictEl = el('verdict');
+  verdictEl.textContent = v.label;
+  verdictEl.className = 'verdict ' + v.cls;
+
+  // indicators
+  const indList = el('indList'); indList.innerHTML = '';
+  data.indicators.forEach(i=>{
+    const li = document.createElement('li');
+    li.textContent = `${i.reason} (weight=${i.weight})`;
+    indList.appendChild(li);
+  });
+
+  el('explainText').textContent = data.explanation || '';
+
+  // urls
+  const urlList = el('urlList'); urlList.innerHTML = '';
+  (data.urls||[]).forEach(u=>{
+    const li = document.createElement('li');
+    const a = document.createElement('a'); a.href = u; a.textContent = u; a.target = '_blank';
+    li.appendChild(a); urlList.appendChild(li);
+  });
+
+  // metadata if present
+  if(data.metadata){
+    el('metaSender').textContent = data.metadata.sender || 'N/A';
+    el('metaSubject').textContent = data.metadata.subject || 'N/A';
+    el('metaBody').textContent = data.metadata.body_preview || 'N/A';
+    el('metadata').classList.remove('hidden');
+  } else {
+    el('metadata').classList.add('hidden');
+  }
+
+  el('result').classList.remove('hidden');
+}
+
+// Text analysis
 analyzeBtn.addEventListener('click', async () =>{
   const text = el('emailText').value.trim();
   if(!text) return alert('Paste email text first');
@@ -19,37 +75,72 @@ analyzeBtn.addEventListener('click', async () =>{
       body: JSON.stringify({email_text: text})
     });
     const data = await res.json();
-    el('scoreVal').textContent = data.score;
-    el('confidenceVal').textContent = data.confidence ?? 0;
-    el('senderVal').textContent = data.sender || 'unknown';
-    const v = verdictFromScore(data.score);
-    const verdictEl = el('verdict');
-    verdictEl.textContent = v.label;
-    verdictEl.className = 'verdict ' + v.cls;
-
-    // indicators
-    const indList = el('indList'); indList.innerHTML = '';
-    data.indicators.forEach(i=>{
-      const li = document.createElement('li');
-      li.textContent = `${i.reason} (weight=${i.weight})`;
-      indList.appendChild(li);
-    });
-
-    el('explainText').textContent = data.explanation || '';
-
-    // urls
-    const urlList = el('urlList'); urlList.innerHTML = '';
-    (data.urls||[]).forEach(u=>{
-      const li = document.createElement('li');
-      const a = document.createElement('a'); a.href = u; a.textContent = u; a.target = '_blank';
-      li.appendChild(a); urlList.appendChild(li);
-    });
-
-    el('result').classList.remove('hidden');
+    displayResult(data);
   }catch(e){
     alert('Analysis failed: '+e.message);
   }finally{
     analyzeBtn.disabled = false;
     analyzeBtn.textContent = 'Analyze';
+  }
+});
+
+// File upload handling
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if(f && f.name.endsWith('.eml')){
+    selectedFile = f;
+    dropZone.textContent = '✓ ' + f.name + ' selected';
+  } else {
+    alert('Please select a valid .eml file');
+  }
+});
+
+// Drag and drop
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+dropZone.addEventListener('dragleave', () => {
+  dropZone.classList.remove('dragover');
+});
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const files = e.dataTransfer.files;
+  if(files[0] && files[0].name.endsWith('.eml')){
+    selectedFile = files[0];
+    dropZone.textContent = '✓ ' + files[0].name + ' selected';
+  } else {
+    alert('Please drop a valid .eml file');
+  }
+});
+
+// Analyze uploaded file
+analyzeFileBtn.addEventListener('click', async () => {
+  if(!selectedFile){
+    alert('Please select an .eml file first');
+    return;
+  }
+  analyzeFileBtn.disabled = true;
+  analyzeFileBtn.textContent = 'Analyzing...';
+  try{
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    const res = await fetch('/analyze-eml', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if(data.error){
+      alert('Error: ' + data.error);
+    } else {
+      displayResult(data);
+    }
+  }catch(e){
+    alert('Analysis failed: '+e.message);
+  }finally{
+    analyzeFileBtn.disabled = false;
+    analyzeFileBtn.textContent = 'Analyze Uploaded File';
   }
 });

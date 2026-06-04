@@ -136,3 +136,49 @@ def is_newly_registered(domain: str, days_threshold: int = 90) -> bool:
         return age <= days_threshold
     except Exception:
         return False
+
+
+# .eml file parsing
+import email
+from email.parser import BytesParser
+
+
+def parse_eml_file(file_bytes: bytes) -> dict:
+    """Parse .eml file and extract sender, subject, and body."""
+    try:
+        parser = BytesParser()
+        msg = parser.parsebytes(file_bytes)
+        
+        sender = msg.get('From', '')
+        subject = msg.get('Subject', '')
+        
+        # Extract body (prefer plain text, fall back to HTML)
+        body = ''
+        if msg.is_multipart():
+            for part in msg.walk():
+                content_type = part.get_content_type()
+                if content_type == 'text/plain':
+                    body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                    break
+            if not body:
+                for part in msg.walk():
+                    if part.get_content_type() == 'text/html':
+                        body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                        break
+        else:
+            body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+        
+        return {
+            'sender': sender.strip(),
+            'subject': subject.strip(),
+            'body': body.strip(),
+            'full_text': f"From: {sender}\nSubject: {subject}\n\n{body}"
+        }
+    except Exception as e:
+        return {
+            'sender': '',
+            'subject': '',
+            'body': '',
+            'full_text': '',
+            'error': str(e)
+        }

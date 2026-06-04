@@ -14,12 +14,37 @@
     </header>
 
     <main>
-      <textarea id="emailText" placeholder="Paste email text here..."></textarea>
-      <div class="controls">
-        <button id="analyzeBtn">Analyze</button>
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="text-tab">Paste Text</button>
+        <button class="tab-btn" data-tab="file-tab">Upload .eml</button>
       </div>
 
+      <section id="text-tab" class="tab-content active">
+        <textarea id="emailText" placeholder="Paste email text here..."></textarea>
+        <div class="controls">
+          <button id="analyzeBtn">Analyze</button>
+        </div>
+      </section>
+
+      <section id="file-tab" class="tab-content">
+        <div id="dropZone" class="drop-zone">
+          <p>Drag and drop .eml file here or click to browse</p>
+          <input type="file" id="fileInput" accept=".eml" hidden />
+        </div>
+        <div class="controls">
+          <button id="analyzeFileBtn">Analyze Uploaded File</button>
+        </div>
+      </section>
+
       <section id="result" class="result hidden">
+        <div id="metadata" class="metadata hidden">
+          <h3>Email Metadata</h3>
+          <p><strong>From:</strong> <span id="metaSender"></span></p>
+          <p><strong>Subject:</strong> <span id="metaSubject"></span></p>
+          <p><strong>Body Preview:</strong></p>
+          <pre id="metaBody"></pre>
+        </div>
+
         <div class="score">
           <h2>Risk Score: <span id="scoreVal">0</span></h2>
           <div>
