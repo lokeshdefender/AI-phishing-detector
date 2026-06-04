@@ -8,9 +8,10 @@ A FastAPI-based web service to analyze email text for phishing indicators and th
 - **Metadata Extraction**: Automatically extracts sender, subject, and body from .eml files
 - **Indicators**: Detects suspicious keywords, urgency language, credential harvesting attempts, brand impersonation, and more
 - **Domain Intelligence**: WHOIS domain age lookup, DNS record validation, suspicious TLD detection
+- **SOC Analyst Reports**: AI-generated analyst-style phishing reports with threat assessment, remediation recommendations, and per-indicator commentary
 - **Explanations**: Clear, actionable recommendations for each detected indicator
 - **Web UI**: Clean, modern interface with tabbed input (text/file upload) and drag-and-drop support
-- **Tests**: Comprehensive pytest suite with automated test reporting (9+ tests)
+- **Tests**: Comprehensive pytest suite with automated test reporting (15+ tests)
 
 ## Quick Start
 
@@ -106,6 +107,44 @@ file: <.eml file>
   }
 }
 ```
+
+## SOC Analyst Report
+
+Each analysis response includes an `analyst_report` object with structured threat intelligence suitable for security operations teams:
+
+```json
+{
+  "analyst_report": {
+    "threat_level": "CRITICAL",
+    "confidence_percentage": 100,
+    "executive_summary": "Email classified as CRITICAL threat...",
+    "threat_assessment": "This email employs tactics consistent with credential harvesting...",
+    "key_indicators": [
+      {
+        "indicator": "credential_harvest",
+        "severity": "CRITICAL",
+        "finding": "Credentials or sensitive info requested: password",
+        "analyst_comment": "Email solicits sensitive information outside normal business processes. Classic phishing signature.",
+        "weight": 50
+      }
+    ],
+    "detection_rationale": "Detection Model Analysis: - 5 high-severity indicators...",
+    "remediation_recommendations": [
+      "DO NOT CLICK any links in this email.",
+      "DO NOT enter credentials or personal information on any website.",
+      "Forward this email to your security team immediately.",
+      "..."
+    ]
+  }
+}
+```
+
+**Threat Levels**:
+- **CRITICAL** (≥80): Immediate action required; block sender and investigate for breach
+- **HIGH** (≥60): Strong indicators of phishing; heightened caution recommended
+- **MEDIUM** (≥40): Notable suspicious characteristics; verify before clicking
+- **LOW** (≥20): Minor indicators present; use normal security practices
+- **MINIMAL** (<20): Appears legitimate; low risk
 
 ## Detection Signals
 
