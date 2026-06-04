@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Phishing Analyzer</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Phishing Analyzer</h1>
+      <p class="subtitle">Paste email text to analyze links and phishing indicators</p>
+    </header>
+
+    <main>
+      <textarea id="emailText" placeholder="Paste email text here..."></textarea>
+      <div class="controls">
+        <button id="analyzeBtn">Analyze</button>
+      </div>
+
+      <section id="result" class="result hidden">
+        <div class="score">
+          <h2>Risk Score: <span id="scoreVal">0</span></h2>
+          <div>
+            <div id="verdict" class="verdict">Low</div>
+            <div style="margin-top:6px;color:var(--muted);">Confidence: <span id="confidenceVal">0</span></div>
+            <div style="margin-top:6px;color:var(--muted);">Sender: <span id="senderVal">unknown</span></div>
+          </div>
+        </div>
+        <div class="indicators">
+          <h3>Indicators</h3>
+          <ul id="indList"></ul>
+        </div>
+        <div class="explanation">
+          <h3>Explanation & Recommendations</h3>
+          <pre id="explainText"></pre>
+        </div>
+        <div class="urls">
+          <h3>Extracted URLs</h3>
+          <ul id="urlList"></ul>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <small>Built as an MVP — do not rely solely on this for security decisions.</small>
+    </footer>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

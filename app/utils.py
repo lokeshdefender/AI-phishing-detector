@@ -1,0 +1,138 @@
+import re
+from urllib.parse import urlparse
+
+SHORTENERS = ["bit.ly","tinyurl.com","t.co","goo.gl","ow.ly","buff.ly","is.gd"]
+
+_ip_re = re.compile(r"^https?://(\d{1,3}\.){3}\d{1,3}")
+
+def extract_urls(text: str):
+    url_regex = r"(https?://[^\s'\)\]\">]+)"
+    raw = re.findall(url_regex, text)
+    cleaned = [u.rstrip('.,;:)"]') for u in raw]
+    return cleaned
+
+
+def is_ip_url(url: str) -> bool:
+    return bool(_ip_re.match(url))
+
+
+def is_shortener(url: str) -> bool:
+    try:
+        host = urlparse(url).netloc.lower()
+    except Exception:
+        return False
+    for s in SHORTENERS:
+        if s in host:
+            return True
+    return False
+
+
+def domain_from_url(url: str) -> str:
+    try:
+        return urlparse(url).netloc.lower()
+    except Exception:
+        return ""
+
+
+def extract_sender(text: str) -> str:
+    """Try to extract a sender email address from raw email text (From: header)."""
+    m = re.search(r"^From:\s*(.*)$", text, re.MULTILINE | re.IGNORECASE)
+    if not m:
+        return ""
+    s = m.group(1).strip()
+    # try <email>
+    em = re.search(r"<([^>]+)>", s)
+    if em:
+        return em.group(1).strip()
+    # try plain email
+    em2 = re.search(r"([\w.+-]+@[\w-]+\.[\w.-]+)", s)
+    if em2:
+        return em2.group(1).strip()
+    return s
+
+
+FREE_EMAIL_PROVIDERS = ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "aol.com", "protonmail.com"]
+
+
+def is_free_email_address(email: str) -> bool:
+    try:
+        domain = email.split('@')[-1].lower()
+    except Exception:
+        return False
+    return any(domain.endswith(p) for p in FREE_EMAIL_PROVIDERS)
+
+
+# WHOIS and DNS helpers
+import whois
+import dns.resolver
+from datetime import datetime
+
+SUSPICIOUS_TLDS = ["xyz","top","info","club","ru","cn","tk","ml","ga","cf","gq"]
+
+
+def get_whois_creation_date(domain: str):
+    """Return creation datetime for a domain, or None."""
+    try:
+        w = whois.whois(domain)
+        cd = w.creation_date
+        # Some whois implementations return a list
+        if isinstance(cd, list):
+            cd = cd[0]
+        if isinstance(cd, datetime):
+            return cd
+        # sometimes it's a date string
+        if isinstance(cd, str):
+            try:
+                return datetime.fromisoformat(cd)
+            except Exception:
+                return None
+        return None
+    except Exception:
+        return None
+
+
+def get_domain_age_days(domain: str):
+    cd = get_whois_creation_date(domain)
+    if not cd:
+        return None
+    delta = datetime.utcnow() - cd
+    return max(0, delta.days)
+
+
+def get_dns_records(domain: str):
+    """Return dict with A, MX, NS lists (may be empty)."""
+    res = {"A": [], "MX": [], "NS": []}
+    try:
+        answers = dns.resolver.resolve(domain, 'A', lifetime=5)
+        res['A'] = [r.to_text() for r in answers]
+    except Exception:
+        res['A'] = []
+    try:
+        answers = dns.resolver.resolve(domain, 'MX', lifetime=5)
+        res['MX'] = [r.to_text() for r in answers]
+    except Exception:
+        res['MX'] = []
+    try:
+        answers = dns.resolver.resolve(domain, 'NS', lifetime=5)
+        res['NS'] = [r.to_text() for r in answers]
+    except Exception:
+        res['NS'] = []
+    return res
+
+
+def is_suspicious_tld(domain: str) -> bool:
+    parts = domain.split('.')
+    if len(parts) < 2:
+        return False
+    tld = parts[-1].lower()
+    return tld in SUSPICIOUS_TLDS
+
+
+def is_newly_registered(domain: str, days_threshold: int = 90) -> bool:
+    try:
+        age = get_domain_age_days(domain)
+        if age is None:
+            return False
+        return age <= days_threshold
+    except Exception:
+        return False
