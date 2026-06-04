@@ -53,6 +53,32 @@
             <div style="margin-top:6px;color:var(--muted);">Sender: <span id="senderVal">unknown</span></div>
           </div>
         </div>
+
+        <div id="analystSection" class="analyst-section hidden">
+          <h3>📋 SOC Analyst Report</h3>
+          <div id="threatLevel" class="threat-level"></div>
+          <div class="report-section">
+            <h4>Executive Summary</h4>
+            <p id="execSummary"></p>
+          </div>
+          <div class="report-section">
+            <h4>Threat Assessment</h4>
+            <p id="threatAssessment"></p>
+          </div>
+          <div class="report-section">
+            <h4>Key Indicators</h4>
+            <div id="keyIndicators"></div>
+          </div>
+          <div class="report-section">
+            <h4>Detection Rationale</h4>
+            <pre id="detectionRationale"></pre>
+          </div>
+          <div class="report-section">
+            <h4>Remediation Recommendations</h4>
+            <ul id="remediationList"></ul>
+          </div>
+        </div>
+
         <div class="indicators">
           <h3>Indicators</h3>
           <ul id="indList"></ul>

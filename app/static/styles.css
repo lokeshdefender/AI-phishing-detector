@@ -22,6 +22,23 @@ button:active{transform:translateY(1px)}
 .metadata.hidden{display:none}
 .metadata p{margin:6px 0;font-size:0.9rem}
 .metadata pre{white-space:pre-wrap;background:rgba(255,255,255,0.02);padding:8px;border-radius:6px;margin:6px 0;font-size:0.85rem}
+.analyst-section{margin:16px 0;padding:16px;background:rgba(79,70,229,0.08);border-left:4px solid var(--accent);border-radius:8px}
+.analyst-section.hidden{display:none}
+.analyst-section h3{margin-top:0;color:var(--accent)}
+.analyst-section h4{margin:12px 0 6px 0;font-size:0.95rem}
+.threat-level{padding:10px;border-radius:6px;margin:8px 0;font-weight:700;text-align:center}
+.threat-level.critical{background:rgba(239,68,68,0.15);color:#ef4444}
+.threat-level.high{background:rgba(245,158,11,0.15);color:#f59e0b}
+.threat-level.medium{background:rgba(251,146,60,0.15);color:#fb923c}
+.threat-level.low{background:rgba(16,185,129,0.15);color:#10b981}
+.threat-level.minimal{background:rgba(34,197,94,0.15);color:#22c55e}
+.report-section{margin:12px 0;padding:10px;background:rgba(255,255,255,0.02);border-radius:6px}
+.report-section p{margin:6px 0;line-height:1.5}
+#keyIndicators{margin:8px 0}
+.indicator-item{margin:8px 0;padding:8px;background:rgba(255,255,255,0.02);border-radius:4px;border-left:3px solid var(--accent)}
+.indicator-item strong{color:var(--accent)}
+#remediationList{margin:8px 0 0 20px}
+#remediationList li{margin:4px 0;line-height:1.4}
 .result{margin-top:20px;padding:16px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))}
 .score{display:flex;align-items:center;justify-content:space-between}
 .verdict{padding:8px 12px;border-radius:999px;font-weight:700}

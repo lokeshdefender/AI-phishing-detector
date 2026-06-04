@@ -11,6 +11,7 @@ from .utils import (
     is_suspicious_tld,
     is_newly_registered,
 )
+from .report_generator import generate_analyst_report
 
 SUSPICIOUS_KEYWORDS = [
     "urgent",
@@ -165,6 +166,15 @@ def analyze_email(email_text: str) -> Dict:
     confidence = min(100, int(score + strong_count * 8))
 
     explanation = generate_explanation(indicators)
+    
+    # Generate SOC analyst-style report
+    analyst_report = generate_analyst_report(
+        score=score,
+        indicators=indicators,
+        urls=urls,
+        sender=sender,
+        email_text=email_text
+    )
 
     return {
         "urls": urls,
@@ -173,6 +183,7 @@ def analyze_email(email_text: str) -> Dict:
         "indicators": indicators,
         "explanation": explanation,
         "sender": sender,
+        "analyst_report": analyst_report,
     }
 
 

@@ -31,6 +31,46 @@ function displayResult(data) {
   verdictEl.textContent = v.label;
   verdictEl.className = 'verdict ' + v.cls;
 
+  // Display analyst report if present
+  if(data.analyst_report){
+    const report = data.analyst_report;
+    
+    // Threat level
+    const threatLvl = el('threatLevel');
+    threatLvl.textContent = `Threat Level: ${report.threat_level} (${report.confidence_percentage}%)`;
+    threatLvl.className = `threat-level ${report.threat_level.toLowerCase()}`;
+    
+    // Executive summary
+    el('execSummary').textContent = report.executive_summary;
+    
+    // Threat assessment
+    el('threatAssessment').textContent = report.threat_assessment;
+    
+    // Key indicators
+    const keyIndDiv = el('keyIndicators'); keyIndDiv.innerHTML = '';
+    report.key_indicators.forEach(ind => {
+      const item = document.createElement('div');
+      item.className = 'indicator-item';
+      item.innerHTML = `<strong>[${ind.severity}]</strong> ${ind.indicator.replace(/_/g, ' ')}<br/>
+        <em>Finding:</em> ${ind.finding}<br/>
+        <em>Analysis:</em> ${ind.analyst_comment}`;
+      keyIndDiv.appendChild(item);
+    });
+    
+    // Detection rationale
+    el('detectionRationale').textContent = report.detection_rationale;
+    
+    // Remediation recommendations
+    const remList = el('remediationList'); remList.innerHTML = '';
+    report.remediation_recommendations.forEach(rec => {
+      const li = document.createElement('li');
+      li.textContent = rec;
+      remList.appendChild(li);
+    });
+    
+    el('analystSection').classList.remove('hidden');
+  }
+
   // indicators
   const indList = el('indList'); indList.innerHTML = '';
   data.indicators.forEach(i=>{
