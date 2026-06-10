@@ -1,4 +1,6 @@
 # Phishing Analyzer MVP
+## 🚀 Live Demo
+https://ai-phishing-detector-ju51.onrender.com
 
 A FastAPI-based web service to analyze email text for phishing indicators and threats.
 
