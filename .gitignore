@@ -1,4 +1,13 @@
 __pycache__/
+*.pyc
 .env
+
 .idea/
 .vscode/
+
+.pytest_cache/
+
+venv/
+.venv/
+
+tests/report.json
