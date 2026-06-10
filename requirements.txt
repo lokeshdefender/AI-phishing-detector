@@ -4,3 +4,4 @@ pydantic
 pytest
 python-whois
 dnspython
+python-multipart
