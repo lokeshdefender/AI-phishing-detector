@@ -65,37 +65,59 @@ def is_free_email_address(email: str) -> bool:
 # WHOIS and DNS helpers
 import whois
 import dns.resolver
-from datetime import datetime
+import threading
+from datetime import datetime, timezone
 
 SUSPICIOUS_TLDS = ["xyz","top","info","club","ru","cn","tk","ml","ga","cf","gq"]
 
 
 def get_whois_creation_date(domain: str):
-    """Return creation datetime for a domain, or None."""
-    try:
-        w = whois.whois(domain)
-        cd = w.creation_date
-        # Some whois implementations return a list
-        if isinstance(cd, list):
-            cd = cd[0]
-        if isinstance(cd, datetime):
-            return cd
-        # sometimes it's a date string
-        if isinstance(cd, str):
-            try:
-                return datetime.fromisoformat(cd)
-            except Exception:
-                return None
+    """Return creation datetime for a domain, or None. Hard timeout of 8 seconds.
+    
+    Uses a daemon thread instead of signal.alarm() so this works on both
+    Windows (dev) and Linux (Docker/production).
+    """
+    result = [None]
+    error = [None]
+
+    def _do_whois():
+        try:
+            w = whois.whois(domain)
+            cd = w.creation_date
+            if isinstance(cd, list):
+                cd = cd[0]
+            if isinstance(cd, datetime):
+                result[0] = cd
+            elif isinstance(cd, str):
+                try:
+                    result[0] = datetime.fromisoformat(cd)
+                except Exception:
+                    pass
+        except Exception as e:
+            error[0] = e
+
+    t = threading.Thread(target=_do_whois, daemon=True)
+    t.start()
+    t.join(timeout=8)  # 8-second hard limit
+
+    if t.is_alive():
+        # Thread still blocked = WHOIS server unresponsive; give up cleanly
         return None
-    except Exception:
+
+    if error[0]:
         return None
+
+    return result[0]
 
 
 def get_domain_age_days(domain: str):
     cd = get_whois_creation_date(domain)
     if not cd:
         return None
-    delta = datetime.utcnow() - cd
+    now = datetime.now(timezone.utc)
+    if cd.tzinfo is None:
+        cd = cd.replace(tzinfo=timezone.utc)
+    delta = now - cd
     return max(0, delta.days)
 
 
@@ -148,10 +170,10 @@ def parse_eml_file(file_bytes: bytes) -> dict:
     try:
         parser = BytesParser()
         msg = parser.parsebytes(file_bytes)
-        
+
         sender = msg.get('From', '')
         subject = msg.get('Subject', '')
-        
+
         # Extract body (prefer plain text, fall back to HTML)
         body = ''
         if msg.is_multipart():
@@ -167,7 +189,7 @@ def parse_eml_file(file_bytes: bytes) -> dict:
                         break
         else:
             body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
-        
+
         return {
             'sender': sender.strip(),
             'subject': subject.strip(),
