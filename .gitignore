@@ -11,3 +11,5 @@ venv/
 .venv/
 
 tests/report.json
+investigations.db
+*.db

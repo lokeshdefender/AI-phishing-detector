@@ -4,9 +4,17 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 from app.analyzer import analyze_email
+from app.database import init_db
 from app.utils import parse_eml_file
 
 app = FastAPI(title="Phishing Analyzer MVP")
+
+
+@app.on_event("startup")
+def startup_event():
+    """Initialize the database when the FastAPI application starts."""
+    init_db()
+
 
 # ─────────────────────────────────────────────
 #  CORS — required for browser clients

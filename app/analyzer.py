@@ -13,29 +13,117 @@ from .utils import (
 )
 from .report_generator import generate_analyst_report
 
-SUSPICIOUS_KEYWORDS = [
-    "urgent",
-    "verify",
-    "password",
-    "account",
-    "click",
-    "confirm",
-    "bank",
-    "security",
-    "update",
-    "login",
-    "limited",
-    "alert",
-    "confirm your",
-    "suspend",
-    "unauthorized",
-    "immediately",
-    "asap",
+# High-confidence phishing keywords (always suspicious)
+HIGH_CONFIDENCE_PHISHING_KEYWORDS = [
+    "verify account",
+    "confirm identity",
+    "confirm your account",
+    "validate account",
+    "verify password",
+    "reset password",
+    "click here",
+    "confirm email",
+    "verify email",
+    "confirm now",
+    "act immediately",
+    "suspend account",
+    "limited access",
+    "unusual activity",
+    "unauthorized access",
     "final notice",
-    "act now",
+    "urgent action",
+    "immediate action",
+]
+
+# Context-dependent keywords (only suspicious in phishing contexts)
+CONTEXT_DEPENDENT_KEYWORDS = {
+    "update": ["account", "password", "credentials", "information"],
+    "confirm": ["identity", "account", "email", "password"],
+    "click": ["here", "link", "verify", "confirm"],
+    "urgent": ["action", "verify", "confirm", "update"],
+    "account": ["verify", "confirm", "suspended", "unauthorized"],
+    "security": ["verify", "confirm", "urgent", "alert"],
+}
+
+# Common legitimate business words that should NOT be flagged
+LEGITIMATE_BUSINESS_KEYWORDS = [
+    "updates",
+    "meeting",
+    "agenda",
+    "team",
+    "project",
+    "feedback",
+    "reminder",
+    "schedule",
+    "report",
 ]
 
 BRAND_KEYWORDS = ["paypal", "apple", "google", "amazon", "microsoft", "bankofamerica", "chase"]
+
+
+def _is_phishing_context(text_lower: str, keyword: str) -> bool:
+    """Check if a context-dependent keyword appears in a phishing context."""
+    if keyword not in CONTEXT_DEPENDENT_KEYWORDS:
+        return False
+    
+    phishing_indicators = CONTEXT_DEPENDENT_KEYWORDS[keyword]
+    
+    # Check if any phishing indicator appears near the keyword
+    for indicator in phishing_indicators:
+        # Look for patterns within 50 characters
+        for i, _ in enumerate(text_lower):
+            if text_lower[i:].startswith(keyword):
+                snippet = text_lower[max(0, i-30):min(len(text_lower), i+len(keyword)+30)]
+                if indicator in snippet:
+                    return True
+                break
+    
+    return False
+
+
+def _detect_suspicious_keywords(text_lower: str) -> List[str]:
+    """Detect suspicious keywords, considering context."""
+    found_kw = []
+    
+    # Check high-confidence phishing keywords
+    for keyword in HIGH_CONFIDENCE_PHISHING_KEYWORDS:
+        if keyword in text_lower:
+            found_kw.append(keyword)
+    
+    # Check context-dependent keywords
+    for keyword in CONTEXT_DEPENDENT_KEYWORDS.keys():
+        if keyword in text_lower:
+            # Skip if it's a legitimate business word in non-phishing context
+            if keyword in ["update", "updates", "meeting", "agenda", "team", "project", 
+                          "feedback", "reminder", "schedule", "report"]:
+                # Check if it's used legitimately (e.g., "project updates", "team meeting")
+                before_context = " ".join(text_lower.split())
+                
+                # Skip legitimate patterns
+                if f"{keyword}s" in text_lower and keyword == "update":
+                    continue  # Skip "updates"
+                if keyword == "meeting" and any(w in text_lower for w in ["team meeting", "calendar meeting", "scheduled meeting"]):
+                    continue
+                if keyword == "agenda" and any(w in text_lower for w in ["meeting agenda", "team agenda"]):
+                    continue
+                if keyword == "team" and any(w in text_lower for w in ["team meeting", "team project", "team members", "team feedback"]):
+                    continue
+                if keyword == "project" and any(w in text_lower for w in ["project updates", "project team", "project deadline", "project status"]):
+                    continue
+                if keyword == "feedback" and any(w in text_lower for w in ["team feedback", "project feedback", "your feedback"]):
+                    continue
+                if keyword == "reminder" and any(w in text_lower for w in ["calendar reminder", "meeting reminder", "task reminder"]):
+                    continue
+                if keyword == "schedule" and any(w in text_lower for w in ["meeting schedule", "calendar schedule"]):
+                    continue
+                if keyword == "report" and any(w in text_lower for w in ["monthly report", "status report", "team report"]):
+                    continue
+            
+            # For other keywords, check phishing context
+            if _is_phishing_context(text_lower, keyword):
+                found_kw.append(keyword)
+    
+    return found_kw
 
 
 def analyze_email(email_text: str) -> Dict:
@@ -73,7 +161,7 @@ def analyze_email(email_text: str) -> Dict:
         score += 8
 
     # Suspicious keywords and urgency language
-    found_kw = [k for k in SUSPICIOUS_KEYWORDS if k in text_lower]
+    found_kw = _detect_suspicious_keywords(text_lower)
     if found_kw:
         kw_weight = min(len(found_kw) * 6, 30)
         indicators.append({"indicator": "suspicious_keywords", "reason": f"Found suspicious words: {', '.join(found_kw)}", "weight": kw_weight})
