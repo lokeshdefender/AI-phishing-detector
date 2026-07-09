@@ -1,3 +1,6 @@
+import importlib
+
+from fastapi.testclient import TestClient
 from sqlalchemy import inspect
 from sqlalchemy.orm import sessionmaker
 
@@ -38,4 +41,31 @@ def test_investigation_model_can_be_persisted(tmp_path):
         saved = session.query(Investigation).filter_by(case_id="CASE-000001").one()
 
     assert saved.title == "Suspicious payment request"
+    assert saved.status == "Open"
+
+
+def test_analyze_endpoint_creates_investigation_record(tmp_path, monkeypatch):
+    db_path = tmp_path / "investigations.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+
+    import app.database as database_module
+    import app.main as main_module
+
+    database_module = importlib.reload(database_module)
+    main_module = importlib.reload(main_module)
+
+    client = TestClient(main_module.app)
+    response = client.post(
+        "/analyze",
+        json={"email_text": "Please verify your account at https://example.com/login"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["case_id"].startswith("CASE-")
+
+    with database_module.SessionLocal() as session:
+        saved = session.query(Investigation).filter_by(case_id=payload["case_id"]).first()
+
+    assert saved is not None
     assert saved.status == "Open"

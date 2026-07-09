@@ -3,8 +3,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
+from app import database as database_module
 from app.analyzer import analyze_email
-from app.database import init_db
 from app.utils import parse_eml_file
 
 app = FastAPI(title="Phishing Analyzer MVP")
@@ -13,7 +13,7 @@ app = FastAPI(title="Phishing Analyzer MVP")
 @app.on_event("startup")
 def startup_event():
     """Initialize the database when the FastAPI application starts."""
-    init_db()
+    database_module.init_db()
 
 
 # ─────────────────────────────────────────────
@@ -47,6 +47,17 @@ class AnalyzeRequest(BaseModel):
         return v
 
 
+def _persist_analysis(submitted_text: str, result: dict) -> str:
+    """Save a completed analysis as a permanent investigation record."""
+    with database_module.SessionLocal() as db:
+        investigation = database_module.create_investigation_record(
+            db,
+            submitted_text=submitted_text,
+            result=result,
+        )
+        return investigation.case_id
+
+
 # ─────────────────────────────────────────────
 #  ROUTES
 # ─────────────────────────────────────────────
@@ -61,6 +72,8 @@ def analyze(request: AnalyzeRequest):
     """Analyze pasted email text and return URLs, risk score and explanations."""
     try:
         result = analyze_email(request.email_text)
+        case_id = _persist_analysis(request.email_text, result)
+        result["case_id"] = case_id
         return result
     except Exception:
         raise HTTPException(status_code=500, detail="Analysis failed. Please try again.")
@@ -87,6 +100,9 @@ async def analyze_eml(file: UploadFile = File(...)):
             "subject": metadata["subject"],
             "body_preview": metadata["body"][:200] + "..." if len(metadata["body"]) > 200 else metadata["body"],
         }
+
+        case_id = _persist_analysis(metadata["full_text"], result)
+        result["case_id"] = case_id
 
         return result
 

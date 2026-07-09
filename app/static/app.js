@@ -26,6 +26,15 @@ function displayResult(data) {
   el('scoreVal').textContent = data.score;
   el('confidenceVal').textContent = data.confidence ?? 0;
   el('senderVal').textContent = data.sender || 'unknown';
+
+  const caseBanner = el('caseIdBanner');
+  const caseValue = el('caseIdValue');
+  if (data.case_id) {
+    caseValue.textContent = data.case_id;
+    caseBanner.classList.remove('hidden');
+  } else {
+    caseBanner.classList.add('hidden');
+  }
   const v = verdictFromScore(data.score);
   const verdictEl = el('verdict');
   verdictEl.textContent = v.label;

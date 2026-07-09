@@ -20,6 +20,7 @@ class AnalyzeResponse(BaseModel):
     explanation: str
     sender: str
     analyst_report: AnalystReport
+    case_id: Optional[str] = None
 
 
 class EmailMetadata(BaseModel):
