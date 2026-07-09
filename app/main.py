@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 from app import database as database_module
 from app.analyzer import analyze_email
+from app.models_db import Investigation
 from app.utils import parse_eml_file
 
 app = FastAPI(title="Phishing Analyzer MVP")
@@ -56,6 +57,20 @@ def _persist_analysis(submitted_text: str, result: dict) -> str:
             result=result,
         )
         return investigation.case_id
+
+
+def _serialize_investigation(investigation: Investigation) -> dict:
+    """Convert a database record into a JSON-safe payload for the history API."""
+    created_at = investigation.created_at.isoformat() if investigation.created_at else ""
+    return {
+        "id": investigation.id,
+        "case_id": investigation.case_id,
+        "title": investigation.title,
+        "sender": investigation.sender or "Unknown",
+        "threat_level": investigation.threat_level or "MINIMAL",
+        "status": investigation.status or "Open",
+        "created_at": created_at,
+    }
 
 
 # ─────────────────────────────────────────────
@@ -110,6 +125,30 @@ async def analyze_eml(file: UploadFile = File(...)):
         raise  # re-raise our own clean errors
     except Exception:
         raise HTTPException(status_code=500, detail="EML analysis failed. Please try again.")
+
+
+@app.get("/investigations")
+def list_investigations():
+    """Return investigation history sorted newest-first."""
+    with database_module.SessionLocal() as db:
+        investigations = (
+            db.query(Investigation)
+            .order_by(Investigation.created_at.desc(), Investigation.id.desc())
+            .all()
+        )
+        return [_serialize_investigation(item) for item in investigations]
+
+
+@app.get("/investigations/{case_id}")
+def investigation_detail(case_id: str):
+    """Serve the investigation details placeholder page for future milestone work."""
+    return FileResponse("app/static/investigation-details.html")
+
+
+@app.get("/history")
+def history_page():
+    """Serve the investigation history page."""
+    return FileResponse("app/static/history.html")
 
 
 @app.get("/")

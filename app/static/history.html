@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Investigation History | CyberSec Copilot</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="page-heading">
+        <h1>Investigation History</h1>
+        <p class="subtitle">Search and review every phishing investigation captured by the platform.</p>
+      </div>
+      <nav class="page-nav" aria-label="Primary">
+        <a class="nav-link" href="/">Analyzer</a>
+        <a class="nav-link active" href="/history">History</a>
+      </nav>
+    </header>
+
+    <section class="history-card">
+      <div class="history-toolbar">
+        <input id="searchInput" type="search" placeholder="Search by case ID, sender, status, threat level..." />
+        <div id="resultsSummary" class="results-summary">Loading investigations…</div>
+      </div>
+      <div class="table-wrapper">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Case ID</th>
+              <th>Threat Level</th>
+              <th>Sender</th>
+              <th>Title</th>
+              <th>Status</th>
+              <th>Created Date</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="/static/history.js"></script>
+</body>
+</html>

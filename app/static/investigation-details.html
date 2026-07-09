@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Investigation Details</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="page-heading">
+        <h1>Investigation Details</h1>
+        <p class="subtitle">A richer case view is being prepared for the next milestone.</p>
+      </div>
+      <nav class="page-nav" aria-label="Primary">
+        <a class="nav-link" href="/">Analyzer</a>
+        <a class="nav-link" href="/history">History</a>
+      </nav>
+    </header>
+
+    <section class="history-card">
+      <h2 id="caseLabel">Loading case…</h2>
+      <p class="subtitle">The detailed investigation view will include executive summary, threat assessment, indicators, URLs, analyst notes, and status management in the next milestone.</p>
+      <a class="secondary-btn" href="/history">Back to History</a>
+    </section>
+  </div>
+
+  <script>
+    const parts = window.location.pathname.split('/');
+    const currentCaseId = parts[parts.length - 1] || 'Unknown';
+    document.getElementById('caseLabel').textContent = currentCaseId;
+  </script>
+</body>
+</html>
