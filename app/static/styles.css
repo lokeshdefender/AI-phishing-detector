@@ -76,3 +76,31 @@ button:active{transform:translateY(1px)}
 .explanation pre{white-space:pre-wrap;background:rgba(255,255,255,0.02);padding:10px;border-radius:6px}
 .hidden{display:none}
 footer{margin-top:18px;color:var(--muted);text-align:center}
+.interior-card{margin-top:12px;padding:16px;border:1px solid rgba(255,255,255,0.08)}
+.ioc-form{display:flex;flex-direction:column;gap:12px}
+.ioc-form label{font-weight:600;color:#cbd5e1}
+.ioc-form input{padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:inherit}
+.case-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:12px}
+.case-form-grid label{display:flex;flex-direction:column;gap:6px;font-size:0.95rem;color:var(--muted)}
+.case-form-grid input,.case-form-grid select,.case-form-grid textarea{width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:inherit}
+.case-form-grid textarea{min-height:92px;resize:vertical}
+.form-status{margin-top:10px;color:var(--muted);font-size:0.9rem}
+
+/* Threat Intelligence provider card styles */
+.provider-block{display:block;padding:10px 12px;margin:6px 0;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03)}
+.provider-block strong{color:#e6eef8}
+.provider-block em{color:var(--muted);font-style:normal;margin-left:6px}
+.provider-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px;font-size:0.9rem}
+.provider-grid div{color:var(--muted)}
+.provider-detail{grid-column:1/-1;margin-top:6px;color:#cbd5e1}
+
+/* Ensure provider column content wraps neatly in the table */
+.history-table td .provider-block{max-width:420px;overflow-wrap:anywhere}
+.history-table td .provider-block a{color:var(--accent)}
+
+/* Responsive adjustments for small screens */
+@media (max-width:720px){
+	.provider-grid{grid-template-columns:1fr;gap:6px}
+	.history-table th,.history-table td{padding:8px 10px}
+}
+

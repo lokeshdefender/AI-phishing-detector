@@ -11,7 +11,7 @@
     <header>
       <div class="page-heading">
         <h1>Investigation Details</h1>
-        <p class="subtitle">A richer case view is being prepared for the next milestone.</p>
+        <p class="subtitle">A case-focused view of the saved phishing investigation.</p>
       </div>
       <nav class="page-nav" aria-label="Primary">
         <a class="nav-link" href="/">Analyzer</a>
@@ -20,16 +20,132 @@
     </header>
 
     <section class="history-card">
-      <h2 id="caseLabel">Loading case…</h2>
-      <p class="subtitle">The detailed investigation view will include executive summary, threat assessment, indicators, URLs, analyst notes, and status management in the next milestone.</p>
-      <a class="secondary-btn" href="/history">Back to History</a>
+      <div class="history-toolbar">
+        <div>
+          <h2 id="caseTitle">Loading case…</h2>
+          <p id="caseSubtitle" class="subtitle">Gathering the saved investigation details.</p>
+        </div>
+        <a class="secondary-btn" href="/history">Back to History</a>
+      </div>
+
+      <div class="metadata" id="caseMeta">
+        <p><strong>Case ID:</strong> <span id="caseIdValue">—</span></p>
+        <p><strong>Status:</strong> <span id="caseStatusValue">—</span></p>
+        <p><strong>Created:</strong> <span id="caseCreatedValue">—</span></p>
+      </div>
+
+      <form id="caseUpdateForm" class="history-card interior-card">
+        <div class="history-toolbar">
+          <h3>Case Actions</h3>
+          <button type="submit">Save Changes</button>
+        </div>
+        <div class="case-form-grid">
+          <label>
+            Title
+            <input id="titleInput" type="text" placeholder="Case title" />
+          </label>
+          <label>
+            Status
+            <select id="statusInput">
+              <option value="Open">Open</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Escalated">Escalated</option>
+              <option value="Closed">Closed</option>
+              <option value="False Positive">False Positive</option>
+            </select>
+          </label>
+          <label>
+            Threat level
+            <select id="threatInput">
+              <option value="MINIMAL">MINIMAL</option>
+              <option value="LOW">LOW</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="HIGH">HIGH</option>
+              <option value="CRITICAL">CRITICAL</option>
+            </select>
+          </label>
+          <label>
+            Assigned to
+            <input id="assignedToInput" type="text" placeholder="Analyst name" />
+          </label>
+        </div>
+        <div class="case-form-grid">
+          <label>
+            Summary
+            <textarea id="summaryInput" placeholder="Summarize the investigation"></textarea>
+          </label>
+          <label>
+            Analyst notes
+            <textarea id="notesInput" placeholder="Record your findings"></textarea>
+          </label>
+        </div>
+        <div class="case-form-grid">
+          <label>
+            Tags
+            <textarea id="tagsInput" placeholder="finance, invoice, urgent"></textarea>
+          </label>
+          <label>
+            Evidence
+            <textarea id="evidenceInput" placeholder="One evidence item per line"></textarea>
+          </label>
+        </div>
+        <p id="saveStatus" class="form-status">Changes are saved instantly.</p>
+      </form>
+
+      <div class="report-section">
+        <h3>Executive Summary</h3>
+        <p id="executiveSummary">No summary available yet.</p>
+      </div>
+
+      <div class="report-section">
+        <h3>Threat Assessment</h3>
+        <div id="threatAssessment" class="threat-level minimal">Loading…</div>
+        <p><strong>Phishing score:</strong> <span id="scoreValue">—</span></p>
+        <p><strong>Confidence:</strong> <span id="confidenceValue">—</span></p>
+      </div>
+
+      <div class="report-section">
+        <h3>Threat Intelligence</h3>
+        <p id="threatIntelStatus" class="subtitle">Enrichment runs in the background for this investigation.</p>
+        <div class="table-wrapper">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>IOC</th>
+                <th>Type</th>
+                <th>Reputation</th>
+                <th>Confidence</th>
+                <th>Risk</th>
+                <th>Providers</th>
+              </tr>
+            </thead>
+            <tbody id="threatIntelBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="report-section">
+        <h3>Indicators</h3>
+        <ul id="indicatorList"></ul>
+      </div>
+
+      <div class="report-section">
+        <h3>URLs</h3>
+        <ul id="urlList"></ul>
+      </div>
+
+      <div class="report-section">
+        <h3>Analyst Report</h3>
+        <pre id="analystReportContent">Loading…</pre>
+      </div>
+
+      <div class="report-section">
+        <h3>Analyst Notes</h3>
+        <pre id="analystNotesContent">No analyst notes recorded.</pre>
+      </div>
     </section>
   </div>
 
-  <script>
-    const parts = window.location.pathname.split('/');
-    const currentCaseId = parts[parts.length - 1] || 'Unknown';
-    document.getElementById('caseLabel').textContent = currentCaseId;
-  </script>
+  <script src="/static/investigation-details.js"></script>
 </body>
 </html>

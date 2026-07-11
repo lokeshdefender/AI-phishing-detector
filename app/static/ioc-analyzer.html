@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>IOC Analyzer</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="page-heading">
+        <h1>IOC Analyzer</h1>
+        <p class="subtitle">Analyze indicators of compromise and enrich them with threat-intel signals.</p>
+      </div>
+      <nav class="page-nav" aria-label="Primary">
+        <a class="nav-link" href="/">Analyzer</a>
+        <a class="nav-link active" href="/ioc-analyzer">IOC Analyzer</a>
+        <a class="nav-link" href="/history">History</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="history-card">
+        <form id="iocForm" class="ioc-form">
+          <label for="iocInput">IOC value</label>
+          <input id="iocInput" name="ioc_value" type="text" placeholder="8.8.8.8, example.com, https://example.com, user@example.com, or a hash" />
+          <div class="controls">
+            <button type="submit">Analyze IOC</button>
+          </div>
+        </form>
+        <p id="iocStatus" class="form-status">Enter an IP, domain, URL, email address, or file hash.</p>
+      </section>
+
+      <section id="iocResult" class="result hidden">
+        <div class="score">
+          <h2>IOC Type: <span id="iocTypeValue">—</span></h2>
+          <div>
+            <div id="reputationBadge" class="verdict medium">Pending</div>
+            <div style="margin-top:6px;color:var(--muted);">Reputation Score: <span id="reputationValue">0</span></div>
+          </div>
+        </div>
+        <div id="caseIdBanner" class="case-id-banner hidden">
+          <strong>Case ID:</strong> <span id="iocCaseId">-</span>
+        </div>
+        <div class="report-section">
+          <h3>Normalized IOC</h3>
+          <pre id="normalizedOutput"></pre>
+        </div>
+        <div class="report-section">
+          <h3>AI Analyst Summary</h3>
+          <p id="summaryOutput"></p>
+        </div>
+        <div class="report-section">
+          <h3>Enrichment Sources</h3>
+          <pre id="enrichmentOutput"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/static/ioc-analyzer.js"></script>
+</body>
+</html>
