@@ -1,5 +1,6 @@
 import json
 import hashlib
+import logging
 import mimetypes
 import os
 import re
@@ -12,17 +13,21 @@ from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, Up
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, field_validator
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import or_
 from app import auth as auth_module
 from app import database as database_module
 from app.analyzer import analyze_email
+from app.config import CONFIG
 from app.copilot import QUICK_ACTIONS, build_investigation_context, generate_copilot_response
 from app.evidence_storage import storage_backend
 from app.investigation_graph import parse_cached_graph, refresh_investigation_graph
 from app.mitre_mapping import parse_cached_mitre, refresh_investigation_mitre
 from app.ioc_analyzer import analyze_ioc
 from app.investigation_pipeline import process_investigation_input
+from app.logging_config import configure_logging
 from app.models_db import Investigation, ThreatIntelIndicator, User
 from app.security import (
     ROLE_ADMIN,
@@ -36,6 +41,8 @@ from app.threat_intel import process_investigation_enrichment
 from app.utils import parse_eml_file
 
 app = FastAPI(title="Phishing Analyzer MVP")
+configure_logging(CONFIG.log_level)
+logger = logging.getLogger("app.main")
 
 
 MAX_EVIDENCE_FILE_SIZE = int(os.getenv("EVIDENCE_MAX_FILE_SIZE_BYTES", "26214400"))  # 25MB default
@@ -96,7 +103,7 @@ def startup_event():
 # ─────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # tighten to your domain after deployment
+    allow_origins=CONFIG.cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -352,8 +359,8 @@ def _set_auth_cookie(response: Response, token: str) -> None:
         key="access_token",
         value=token,
         httponly=True,
-        secure=False,
-        samesite="lax",
+        secure=CONFIG.auth_cookie_secure,
+        samesite=CONFIG.auth_cookie_samesite,
         max_age=60 * 60 * 8,
         path="/",
     )
@@ -505,10 +512,76 @@ def _validate_evidence_upload(filename: str, mime_type: str, file_size: int) -> 
 # ─────────────────────────────────────────────
 #  ROUTES
 # ─────────────────────────────────────────────
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    logger.warning("http_exception", extra={"status_code": exc.status_code, "path": request.url.path})
+    return Response(
+        content=json.dumps({
+            "error": {
+                "code": exc.status_code,
+                "message": exc.detail,
+            }
+        }),
+        media_type="application/json",
+        status_code=exc.status_code,
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def starlette_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    logger.warning("starlette_http_exception", extra={"status_code": exc.status_code, "path": request.url.path})
+    return Response(
+        content=json.dumps({
+            "error": {
+                "code": exc.status_code,
+                "message": exc.detail,
+            }
+        }),
+        media_type="application/json",
+        status_code=exc.status_code,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.warning("validation_exception", extra={"path": request.url.path})
+    return Response(
+        content=json.dumps({
+            "error": {
+                "code": 422,
+                "message": "Validation error",
+            }
+        }),
+        media_type="application/json",
+        status_code=422,
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("unhandled_exception", extra={"path": request.url.path})
+    return Response(
+        content=json.dumps({
+            "error": {
+                "code": 500,
+                "message": "Internal server error",
+            }
+        }),
+        media_type="application/json",
+        status_code=500,
+    )
+
+
 @app.get("/health")
 def health():
     """Health check endpoint for deployment platforms."""
-    return {"status": "ok"}
+    db_ok = database_module.check_database_connection()
+    resolved_version = (os.getenv("APP_VERSION") or CONFIG.app_version).strip()
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "database": "connected" if db_ok else "disconnected",
+        "version": resolved_version,
+    }
 
 
 @app.post("/register")

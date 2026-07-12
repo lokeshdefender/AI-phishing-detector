@@ -1,11 +1,11 @@
 import uvicorn
-import os
+from app.config import CONFIG
 
 if __name__ == "__main__":
-    reload = os.environ.get("ENV", "production") == "development"
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 8000)),
-        reload=reload,
+        host=CONFIG.host,
+        port=CONFIG.port,
+        reload=CONFIG.reload,
+        log_level=CONFIG.log_level.lower(),
     )

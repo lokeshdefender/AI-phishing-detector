@@ -867,3 +867,13 @@ def delete_evidence_record(record: InvestigationEvidence, *, session: Session) -
     """Delete an evidence metadata record."""
     session.delete(record)
     session.commit()
+
+
+def check_database_connection() -> bool:
+    """Return True if a basic database connectivity probe succeeds."""
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False

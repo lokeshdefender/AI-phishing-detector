@@ -19,32 +19,95 @@ A FastAPI-based web service to analyze email text for phishing indicators and th
 
 ### Local Setup
 
-1. **Install dependencies**:
+1. **Create a virtual environment (recommended)**:
+  ```bash
+  python -m venv .venv
+  ```
+
+2. **Activate environment**:
+  Windows PowerShell:
+  ```bash
+  .\.venv\Scripts\Activate.ps1
+  ```
+
+3. **Install dependencies**:
    ```bash
    python -m pip install -r requirements.txt
    ```
 
-2. **Run the app**:
+4. **Configure environment variables**:
+  ```bash
+  copy .env.example .env
+  ```
+  Then adjust values in `.env` for your environment.
+
+5. **Run the app**:
    ```bash
    python run.py
    ```
    or
    ```bash
-   uvicorn app.main:app --reload
+  uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
    ```
 
-3. **Open browser**: http://127.0.0.1:8000
+6. **Open browser**: http://127.0.0.1:8000
 
 ### Docker Setup
 
-1. **Build and run with docker-compose**:
+1. **Create env file**:
+  ```bash
+  copy .env.example .env
+  ```
+
+2. **Build and run with docker-compose**:
    ```bash
    docker-compose up
    ```
 
-2. **Open browser**: http://127.0.0.1:8000
+3. **Open browser**: http://127.0.0.1:8000
 
-3. **Stop**: `docker-compose down`
+4. **Stop**:
+  ```bash
+  docker-compose down
+  ```
+
+### Docker (Single Container)
+
+```bash
+docker build -t phishing-analyzer .
+docker run --rm -p 8000:8000 --env-file .env phishing-analyzer
+```
+
+## Environment Variables
+
+Core runtime variables:
+
+- `APP_ENV`: `development` or `production`
+- `APP_VERSION`: version returned by `/health`
+- `APP_HOST`: bind host
+- `APP_PORT`: bind port
+- `APP_RELOAD`: enable auto-reload (development only)
+- `LOG_LEVEL`: logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
+- `CORS_ALLOW_ORIGINS`: `*` or comma-separated origins
+
+Authentication and security:
+
+- `AUTH_SECRET_KEY`: JWT signing key (must be changed in production)
+- `AUTH_ACCESS_TOKEN_EXPIRE_MINUTES`: token lifetime
+- `AUTH_COOKIE_SECURE`: `true` in production HTTPS environments
+- `AUTH_COOKIE_SAMESITE`: `lax` or `strict`
+
+Data and storage:
+
+- `DATABASE_URL`: SQLAlchemy connection URL
+- `EVIDENCE_STORAGE_PATH`: file storage path for evidence
+- `EVIDENCE_MAX_FILE_SIZE_BYTES`: max upload size for evidence API
+
+Threat intel providers (optional):
+
+- `VIRUSTOTAL_API_KEY`
+- `ABUSEIPDB_API_KEY`
+- `OTX_API_KEY`
 
 ## API Endpoint
 
@@ -160,10 +223,28 @@ The analyzer evaluates:
 ## Running Tests
 
 ```bash
-python -m pytest -v
+python -m pytest -q
 ```
 
 Test results are saved to `tests/report.json`.
+
+## Health Endpoint
+
+`GET /health` returns:
+
+- application status (`ok` or `degraded`)
+- database connectivity state
+- application version
+
+Example:
+
+```json
+{
+  "status": "ok",
+  "database": "connected",
+  "version": "0.3.0"
+}
+```
 
 ## Project Structure
 
