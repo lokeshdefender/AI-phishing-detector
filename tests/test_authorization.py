@@ -115,3 +115,42 @@ def test_viewer_can_add_comment_but_cannot_assign(tmp_path, monkeypatch):
         json={"assigned_user_id": None},
     )
     assert blocked_assignment.status_code == 403
+
+
+def test_viewer_cannot_upload_or_delete_evidence(tmp_path, monkeypatch):
+    _, main_module = _boot(tmp_path, monkeypatch)
+
+    admin_client = TestClient(main_module.app)
+    _register(admin_client, "admin-evidence-auth@example.com", "admin")
+
+    create_case = admin_client.post(
+        "/investigate",
+        json={"input_text": "Evidence auth case"},
+    )
+    assert create_case.status_code == 200
+    case_id = create_case.json()["case_id"]
+
+    upload = admin_client.post(
+        f"/investigations/{case_id}/evidence",
+        files={"file": ("auth.txt", b"evidence", "text/plain")},
+    )
+    assert upload.status_code == 200
+    evidence_id = upload.json()["evidence_id"]
+
+    viewer_client = TestClient(main_module.app)
+    _register(viewer_client, "viewer-evidence-auth@example.com", "viewer")
+
+    blocked_upload = viewer_client.post(
+        f"/investigations/{case_id}/evidence",
+        files={"file": ("blocked.txt", b"x", "text/plain")},
+    )
+    assert blocked_upload.status_code == 403
+
+    allowed_list = viewer_client.get(f"/investigations/{case_id}/evidence")
+    assert allowed_list.status_code == 200
+
+    allowed_download = viewer_client.get(f"/investigations/{case_id}/evidence/{evidence_id}/download")
+    assert allowed_download.status_code == 200
+
+    blocked_delete = viewer_client.delete(f"/investigations/{case_id}/evidence/{evidence_id}")
+    assert blocked_delete.status_code == 403

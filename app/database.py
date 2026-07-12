@@ -2,6 +2,9 @@ import json
 import os
 from pathlib import Path
 from typing import Any, List
+from collections import Counter
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
@@ -12,6 +15,7 @@ from .models_db import (
     Investigation,
     InvestigationChatMessage,
     InvestigationComment,
+    InvestigationEvidence,
     InvestigationTimeline,
     Organization,
     ThreatIntelCache,
@@ -433,6 +437,141 @@ def get_dashboard_summary(*, organization_id: int, user_id: int, recent_limit: i
         }
 
 
+def get_dashboard_analytics(*, organization_id: int, days: int = 30, top_n: int = 5) -> dict:
+    """Return executive analytics for the organization using existing investigation data."""
+    safe_days = min(max(int(days or 30), 1), 90)
+    safe_top_n = min(max(int(top_n or 5), 1), 20)
+
+    now = datetime.now(timezone.utc)
+    start_today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    start_week = now - timedelta(days=7)
+    start_range = start_today - timedelta(days=safe_days - 1)
+
+    with SessionLocal() as session:
+        query = session.query(Investigation).filter(Investigation.organization_id == organization_id)
+        investigations = query.all()
+
+        def _as_utc(value: datetime | None) -> datetime | None:
+            if value is None:
+                return None
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value.astimezone(timezone.utc)
+
+        total_investigations = len(investigations)
+        open_cases = sum(1 for item in investigations if (item.status or "Open") != "Closed")
+        closed_cases = sum(1 for item in investigations if (item.status or "") == "Closed")
+        high_risk_cases = sum(1 for item in investigations if (item.threat_level or "").upper() in {"HIGH", "CRITICAL"})
+        medium_risk_cases = sum(1 for item in investigations if (item.threat_level or "").upper() == "MEDIUM")
+        low_risk_cases = sum(1 for item in investigations if (item.threat_level or "").upper() in {"LOW", "MINIMAL"})
+
+        created_today = sum(1 for item in investigations if _as_utc(item.created_at) and _as_utc(item.created_at) >= start_today)
+        created_this_week = sum(1 for item in investigations if _as_utc(item.created_at) and _as_utc(item.created_at) >= start_week)
+
+        threat_counts = Counter((item.threat_level or "MINIMAL").upper() for item in investigations)
+        cases_by_threat_level = [
+            {"label": label, "count": int(threat_counts.get(label, 0))}
+            for label in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "MINIMAL"]
+        ]
+
+        daily_counts = Counter()
+        for item in investigations:
+            created_at = _as_utc(item.created_at)
+            if not created_at:
+                continue
+            if created_at >= start_range:
+                daily_counts[created_at.date().isoformat()] += 1
+
+        cases_over_time = []
+        for offset in range(safe_days):
+            day = (start_range + timedelta(days=offset)).date().isoformat()
+            cases_over_time.append({"date": day, "count": int(daily_counts.get(day, 0))})
+
+        ioc_rows = (
+            session.query(ThreatIntelIndicator.ioc_type)
+            .join(Investigation, Investigation.id == ThreatIntelIndicator.investigation_id)
+            .filter(Investigation.organization_id == organization_id)
+            .all()
+        )
+        ioc_counts = Counter((row[0] or "Unknown") for row in ioc_rows)
+        top_ioc_types = [
+            {"label": label, "count": int(count)}
+            for label, count in ioc_counts.most_common(safe_top_n)
+        ]
+
+        mitre_counts = Counter()
+        domain_counts = Counter()
+
+        for item in investigations:
+            try:
+                parsed_mitre = json.loads(item.mitre_mappings or "{}") if isinstance(item.mitre_mappings, str) else item.mitre_mappings
+            except Exception:
+                parsed_mitre = {}
+            mappings = []
+            if isinstance(parsed_mitre, dict):
+                mappings = parsed_mitre.get("mappings") or []
+            elif isinstance(parsed_mitre, list):
+                mappings = parsed_mitre
+
+            for mapping in mappings:
+                if not isinstance(mapping, dict):
+                    continue
+                label = (mapping.get("technique") or mapping.get("attack_id") or "Unknown Technique").strip()
+                if label:
+                    mitre_counts[label] += 1
+
+            try:
+                parsed_urls = json.loads(item.urls or "[]") if isinstance(item.urls, str) else item.urls
+            except Exception:
+                parsed_urls = []
+            if not isinstance(parsed_urls, list):
+                parsed_urls = [parsed_urls]
+
+            for value in parsed_urls:
+                if not value:
+                    continue
+                raw = str(value).strip()
+                parsed = urlparse(raw if "://" in raw else f"http://{raw}")
+                host = (parsed.netloc or parsed.path or "").lower().strip()
+                if host.startswith("www."):
+                    host = host[4:]
+                if host:
+                    domain_counts[host] += 1
+
+        top_mitre_techniques = [
+            {"label": label, "count": int(count)}
+            for label, count in mitre_counts.most_common(safe_top_n)
+        ]
+        top_targeted_domains = [
+            {"label": label, "count": int(count)}
+            for label, count in domain_counts.most_common(safe_top_n)
+        ]
+
+        return {
+            "kpis": {
+                "total_investigations": total_investigations,
+                "open_cases": open_cases,
+                "closed_cases": closed_cases,
+                "high_risk_cases": high_risk_cases,
+                "medium_risk_cases": medium_risk_cases,
+                "low_risk_cases": low_risk_cases,
+                "created_today": created_today,
+                "created_this_week": created_this_week,
+            },
+            "charts": {
+                "cases_by_threat_level": cases_by_threat_level,
+                "cases_over_time": cases_over_time,
+                "top_ioc_types": top_ioc_types,
+                "top_mitre_techniques": top_mitre_techniques,
+                "top_targeted_domains": top_targeted_domains,
+            },
+            "meta": {
+                "days": safe_days,
+                "top_n": safe_top_n,
+            },
+        }
+
+
 def append_timeline_event(
     investigation_id: int,
     *,
@@ -636,3 +775,95 @@ def clear_chat_messages(investigation_id: int, *, session: Session | None = None
     finally:
         if owned:
             session.close()
+
+
+def append_evidence_record(
+    investigation: Investigation,
+    *,
+    evidence_id: str,
+    filename: str,
+    original_filename: str,
+    file_type: str,
+    mime_type: str,
+    file_size: int,
+    sha256: str,
+    uploaded_by: int,
+    session: Session,
+) -> dict:
+    """Persist an uploaded evidence artifact metadata record."""
+    record = InvestigationEvidence(
+        evidence_id=evidence_id,
+        case_id=investigation.case_id,
+        investigation_id=investigation.id,
+        filename=filename,
+        original_filename=original_filename,
+        file_type=file_type,
+        mime_type=mime_type,
+        file_size=file_size,
+        sha256=sha256,
+        uploaded_by=uploaded_by,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+
+    uploader = session.query(User).filter(User.id == record.uploaded_by).first()
+    return {
+        "evidence_id": record.evidence_id,
+        "case_id": record.case_id,
+        "filename": record.filename,
+        "original_filename": record.original_filename,
+        "file_type": record.file_type,
+        "mime_type": record.mime_type,
+        "file_size": record.file_size,
+        "sha256": record.sha256,
+        "upload_time": record.upload_time.isoformat() if record.upload_time else None,
+        "uploaded_by": record.uploaded_by,
+        "uploaded_by_name": (uploader.full_name or uploader.email) if uploader else str(record.uploaded_by),
+    }
+
+
+def list_evidence_records(investigation_id: int, *, session: Session) -> List[dict]:
+    """Return evidence metadata records for an investigation, newest first."""
+    rows = (
+        session.query(InvestigationEvidence)
+        .filter(InvestigationEvidence.investigation_id == investigation_id)
+        .order_by(InvestigationEvidence.upload_time.desc(), InvestigationEvidence.id.desc())
+        .all()
+    )
+
+    results = []
+    for row in rows:
+        uploader = session.query(User).filter(User.id == row.uploaded_by).first()
+        results.append(
+            {
+                "evidence_id": row.evidence_id,
+                "case_id": row.case_id,
+                "filename": row.filename,
+                "original_filename": row.original_filename,
+                "file_type": row.file_type,
+                "mime_type": row.mime_type,
+                "file_size": row.file_size,
+                "sha256": row.sha256,
+                "upload_time": row.upload_time.isoformat() if row.upload_time else None,
+                "uploaded_by": row.uploaded_by,
+                "uploaded_by_name": (uploader.full_name or uploader.email) if uploader else str(row.uploaded_by),
+            }
+        )
+    return results
+
+
+def get_evidence_record(investigation_id: int, evidence_id: str, *, session: Session) -> InvestigationEvidence | None:
+    """Fetch a single evidence record by investigation scope and evidence ID."""
+    return (
+        session.query(InvestigationEvidence)
+        .filter(InvestigationEvidence.investigation_id == investigation_id)
+        .filter(InvestigationEvidence.evidence_id == evidence_id)
+        .first()
+    )
+
+
+def delete_evidence_record(record: InvestigationEvidence, *, session: Session) -> None:
+    """Delete an evidence metadata record."""
+    session.delete(record)
+    session.commit()

@@ -58,6 +58,7 @@ class User(Base):
         foreign_keys="Investigation.assigned_by",
     )
     comments: Mapped[list["InvestigationComment"]] = relationship(back_populates="author")
+    uploaded_evidence: Mapped[list["InvestigationEvidence"]] = relationship(back_populates="uploader")
 
 
 class Investigation(Base):
@@ -128,6 +129,10 @@ class Investigation(Base):
         foreign_keys=[assigned_by],
     )
     comments: Mapped[list["InvestigationComment"]] = relationship(
+        back_populates="investigation",
+        cascade="all, delete-orphan",
+    )
+    evidence_items: Mapped[list["InvestigationEvidence"]] = relationship(
         back_populates="investigation",
         cascade="all, delete-orphan",
     )
@@ -227,4 +232,30 @@ class InvestigationComment(Base):
 
     investigation: Mapped[Investigation] = relationship(back_populates="comments")
     author: Mapped[User] = relationship(back_populates="comments")
+
+
+class InvestigationEvidence(Base):
+    """Evidence artifact uploaded and linked to an investigation."""
+
+    __tablename__ = "investigation_evidence"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    evidence_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, index=True)
+    case_id: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    investigation_id: Mapped[int] = mapped_column(ForeignKey("investigations.id"), index=True, nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    upload_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+
+    investigation: Mapped[Investigation] = relationship(back_populates="evidence_items")
+    uploader: Mapped[User] = relationship(back_populates="uploaded_evidence")
 

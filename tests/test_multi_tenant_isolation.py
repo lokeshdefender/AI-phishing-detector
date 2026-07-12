@@ -70,3 +70,36 @@ def test_cross_org_case_access_is_denied(tmp_path, monkeypatch):
         json={"assigned_user_id": None},
     )
     assert assignment.status_code == 404
+
+
+def test_cross_org_evidence_access_is_denied(tmp_path, monkeypatch):
+    _, main_module = _boot(tmp_path, monkeypatch)
+
+    org_a_client = TestClient(main_module.app)
+    _register(org_a_client, "orga-evidence-isolation@example.com", "Org A")
+
+    create_case = org_a_client.post(
+        "/investigate",
+        json={"input_text": "Org A evidence case"},
+    )
+    assert create_case.status_code == 200
+    case_id = create_case.json()["case_id"]
+
+    upload = org_a_client.post(
+        f"/investigations/{case_id}/evidence",
+        files={"file": ("orga.txt", b"orga", "text/plain")},
+    )
+    assert upload.status_code == 200
+    evidence_id = upload.json()["evidence_id"]
+
+    org_b_client = TestClient(main_module.app)
+    _register(org_b_client, "orgb-evidence-isolation@example.com", "Org B")
+
+    list_response = org_b_client.get(f"/investigations/{case_id}/evidence")
+    assert list_response.status_code == 404
+
+    download_response = org_b_client.get(f"/investigations/{case_id}/evidence/{evidence_id}/download")
+    assert download_response.status_code == 404
+
+    delete_response = org_b_client.delete(f"/investigations/{case_id}/evidence/{evidence_id}")
+    assert delete_response.status_code == 404

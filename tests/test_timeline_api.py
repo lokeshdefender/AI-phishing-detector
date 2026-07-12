@@ -93,3 +93,45 @@ Body with https://example.com/login
     assert timeline.status_code == 200
     events = timeline.json()
     assert any(ev["event_type"] == "email_ingested" for ev in events)
+
+
+def test_evidence_upload_and_delete_add_timeline_events(tmp_path, monkeypatch):
+    db_path = tmp_path / "timeline_evidence.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+    monkeypatch.setenv("EVIDENCE_STORAGE_PATH", str(tmp_path / "timeline_evidence_store"))
+
+    import app.database as database_module
+    import app.evidence_storage as evidence_storage_module
+    import app.main as main_module
+    from tests.conftest import authenticate_client
+
+    database_module = importlib.reload(database_module)
+    evidence_storage_module = importlib.reload(evidence_storage_module)
+    main_module = importlib.reload(main_module)
+    database_module.init_db(database_url=f"sqlite:///{db_path}")
+
+    client = TestClient(main_module.app)
+    authenticate_client(client)
+
+    create_case = client.post(
+        "/investigate",
+        json={"input_text": "Timeline evidence test case"},
+    )
+    assert create_case.status_code == 200
+    case_id = create_case.json()["case_id"]
+
+    upload = client.post(
+        f"/investigations/{case_id}/evidence",
+        files={"file": ("timeline.txt", b"timeline-evidence", "text/plain")},
+    )
+    assert upload.status_code == 200
+    evidence_id = upload.json()["evidence_id"]
+
+    remove = client.delete(f"/investigations/{case_id}/evidence/{evidence_id}")
+    assert remove.status_code == 200
+
+    timeline = client.get(f"/investigations/{case_id}/timeline")
+    assert timeline.status_code == 200
+    events = timeline.json()
+    assert any(ev["event_type"] == "evidence_uploaded" for ev in events)
+    assert any(ev["event_type"] == "evidence_deleted" for ev in events)

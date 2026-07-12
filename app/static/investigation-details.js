@@ -43,6 +43,12 @@ const copilotInput = document.getElementById('copilotInput');
 const clearCopilotBtn = document.getElementById('clearCopilotBtn');
 const copyLastResponseBtn = document.getElementById('copyLastResponseBtn');
 const copilotQuickActions = document.getElementById('copilotQuickActions');
+const evidenceDropZone = document.getElementById('evidenceDropZone');
+const evidenceFileInput = document.getElementById('evidenceFileInput');
+const evidenceUploadBtn = document.getElementById('evidenceUploadBtn');
+const evidenceStatus = document.getElementById('evidenceStatus');
+const evidenceBody = document.getElementById('evidenceBody');
+const evidenceMetadataContent = document.getElementById('evidenceMetadataContent');
 
 let currentCaseData = null;
 const timelineContainer = document.getElementById('timelineContainer');
@@ -50,6 +56,8 @@ let graphInstance = null;
 let lastAssistantMessage = '';
 let copilotMessagesCache = [];
 let currentUserId = null;
+let currentUserRole = null;
+let selectedEvidenceFile = null;
 
 ensureAuthenticated();
 bindLogoutButton();
@@ -190,6 +198,159 @@ function renderComments(items) {
     `;
     commentsContainer.appendChild(message);
   });
+}
+
+function formatFileSize(bytes) {
+  const size = Number(bytes || 0);
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function renderEvidenceMetadata(item) {
+  if (!evidenceMetadataContent) return;
+  if (!item) {
+    evidenceMetadataContent.textContent = 'Select an evidence item to inspect metadata.';
+    return;
+  }
+  const payload = {
+    evidence_id: item.evidence_id,
+    case_id: item.case_id,
+    filename: item.filename,
+    original_filename: item.original_filename,
+    file_type: item.file_type,
+    mime_type: item.mime_type,
+    file_size: item.file_size,
+    sha256: item.sha256,
+    upload_time: item.upload_time,
+    uploaded_by: item.uploaded_by,
+    uploaded_by_name: item.uploaded_by_name,
+  };
+  evidenceMetadataContent.textContent = JSON.stringify(payload, null, 2);
+}
+
+function canManageEvidence() {
+  return currentUserRole === 'admin' || currentUserRole === 'analyst';
+}
+
+function renderEvidence(items) {
+  if (!evidenceBody) return;
+  if (!items || !items.length) {
+    evidenceBody.innerHTML = '<tr><td colspan="5" class="empty-state">No evidence uploaded for this case yet.</td></tr>';
+    renderEvidenceMetadata(null);
+    return;
+  }
+
+  evidenceBody.innerHTML = '';
+  items.forEach((item) => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${item.original_filename || item.filename}</td>
+      <td>${item.file_type || 'unknown'}</td>
+      <td>${formatFileSize(item.file_size)}</td>
+      <td>${item.upload_time ? new Date(item.upload_time).toLocaleString() : 'Unknown time'}</td>
+      <td class="evidence-actions-cell"></td>
+    `;
+
+    const actionsCell = row.querySelector('.evidence-actions-cell');
+
+    const viewBtn = document.createElement('button');
+    viewBtn.type = 'button';
+    viewBtn.className = 'secondary-btn';
+    viewBtn.textContent = 'View';
+    viewBtn.addEventListener('click', () => renderEvidenceMetadata(item));
+    actionsCell.appendChild(viewBtn);
+
+    const downloadBtn = document.createElement('button');
+    downloadBtn.type = 'button';
+    downloadBtn.className = 'secondary-btn';
+    downloadBtn.textContent = 'Download';
+    downloadBtn.addEventListener('click', () => {
+      window.location.href = `/investigations/${currentCaseId}/evidence/${item.evidence_id}/download`;
+    });
+    actionsCell.appendChild(downloadBtn);
+
+    if (canManageEvidence()) {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'secondary-btn';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.addEventListener('click', async () => {
+        evidenceStatus.textContent = 'Deleting evidence...';
+        try {
+          const response = await authApiFetch(`/investigations/${currentCaseId}/evidence/${item.evidence_id}`, {
+            method: 'DELETE',
+            headers: { Accept: 'application/json' },
+          });
+          if (!response.ok) throw new Error('Delete failed');
+          evidenceStatus.textContent = 'Evidence deleted.';
+          await loadEvidence();
+          await loadActivity();
+          await loadTimeline();
+        } catch (error) {
+          evidenceStatus.textContent = 'Unable to delete evidence right now.';
+        }
+      });
+      actionsCell.appendChild(deleteBtn);
+    }
+
+    evidenceBody.appendChild(row);
+  });
+}
+
+async function loadEvidence() {
+  if (!evidenceBody) return;
+  try {
+    const response = await authApiFetch(`/investigations/${currentCaseId}/evidence`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) throw new Error('Evidence endpoint unavailable');
+    const data = await response.json();
+    renderEvidence(data.items || []);
+  } catch (error) {
+    evidenceBody.innerHTML = '<tr><td colspan="5" class="empty-state">Unable to load evidence right now.</td></tr>';
+  }
+}
+
+async function uploadEvidenceFile() {
+  if (!selectedEvidenceFile) {
+    evidenceStatus.textContent = 'Choose a file before uploading evidence.';
+    return;
+  }
+  if (!canManageEvidence()) {
+    evidenceStatus.textContent = 'You do not have permission to upload evidence.';
+    return;
+  }
+
+  evidenceUploadBtn.disabled = true;
+  evidenceStatus.textContent = 'Uploading evidence...';
+  try {
+    const formData = new FormData();
+    formData.append('file', selectedEvidenceFile);
+
+    const response = await authApiFetch(`/investigations/${currentCaseId}/evidence`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) throw new Error('Upload failed');
+
+    evidenceStatus.textContent = `Evidence uploaded: ${selectedEvidenceFile.name}`;
+    selectedEvidenceFile = null;
+    if (evidenceDropZone) {
+      evidenceDropZone.querySelector('p').textContent = 'Drag and drop evidence file here or click to browse';
+    }
+    if (evidenceFileInput) {
+      evidenceFileInput.value = '';
+    }
+
+    await loadEvidence();
+    await loadActivity();
+    await loadTimeline();
+  } catch (error) {
+    evidenceStatus.textContent = 'Unable to upload evidence right now.';
+  } finally {
+    evidenceUploadBtn.disabled = false;
+  }
 }
 
 async function loadAssignableUsers() {
@@ -531,8 +692,16 @@ async function loadCurrentUser() {
     if (!response.ok) return;
     const data = await response.json();
     currentUserId = data && data.user ? data.user.id : null;
+    currentUserRole = data && data.user ? String(data.user.role || '').toLowerCase() : null;
+    if (evidenceUploadBtn && !canManageEvidence()) {
+      evidenceUploadBtn.disabled = true;
+      if (evidenceStatus) {
+        evidenceStatus.textContent = 'Read-only access: only analysts/admins can upload or delete evidence.';
+      }
+    }
   } catch (error) {
     currentUserId = null;
+    currentUserRole = null;
   }
 }
 
@@ -842,6 +1011,47 @@ if (commentForm) {
 }
 
 loadCurrentUser();
+if (evidenceDropZone && evidenceFileInput) {
+  evidenceDropZone.addEventListener('click', () => evidenceFileInput.click());
+
+  evidenceFileInput.addEventListener('change', (event) => {
+    const candidate = event.target.files && event.target.files[0] ? event.target.files[0] : null;
+    if (!candidate) return;
+    selectedEvidenceFile = candidate;
+    const label = evidenceDropZone.querySelector('p');
+    if (label) {
+      label.textContent = `Selected: ${candidate.name}`;
+    }
+  });
+
+  evidenceDropZone.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    evidenceDropZone.classList.add('dragover');
+  });
+
+  evidenceDropZone.addEventListener('dragleave', () => {
+    evidenceDropZone.classList.remove('dragover');
+  });
+
+  evidenceDropZone.addEventListener('drop', (event) => {
+    event.preventDefault();
+    evidenceDropZone.classList.remove('dragover');
+    const candidate = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]
+      ? event.dataTransfer.files[0]
+      : null;
+    if (!candidate) return;
+    selectedEvidenceFile = candidate;
+    const label = evidenceDropZone.querySelector('p');
+    if (label) {
+      label.textContent = `Selected: ${candidate.name}`;
+    }
+  });
+}
+
+if (evidenceUploadBtn) {
+  evidenceUploadBtn.addEventListener('click', uploadEvidenceFile);
+}
+
 loadAssignableUsers();
 loadInvestigation();
 loadThreatIntel();
@@ -863,3 +1073,4 @@ setInterval(() => {
   loadMitreMappings();
 }, 7000);
 loadCopilotHistory();
+loadEvidence();

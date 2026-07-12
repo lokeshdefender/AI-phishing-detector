@@ -1,5 +1,10 @@
 import json
+import hashlib
+import mimetypes
+import os
+import re
 import threading
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -13,6 +18,7 @@ from app import auth as auth_module
 from app import database as database_module
 from app.analyzer import analyze_email
 from app.copilot import QUICK_ACTIONS, build_investigation_context, generate_copilot_response
+from app.evidence_storage import storage_backend
 from app.investigation_graph import parse_cached_graph, refresh_investigation_graph
 from app.mitre_mapping import parse_cached_mitre, refresh_investigation_mitre
 from app.ioc_analyzer import analyze_ioc
@@ -30,6 +36,53 @@ from app.threat_intel import process_investigation_enrichment
 from app.utils import parse_eml_file
 
 app = FastAPI(title="Phishing Analyzer MVP")
+
+
+MAX_EVIDENCE_FILE_SIZE = int(os.getenv("EVIDENCE_MAX_FILE_SIZE_BYTES", "26214400"))  # 25MB default
+ALLOWED_EVIDENCE_EXTENSIONS = {
+    ".pdf",
+    ".docx",
+    ".xlsx",
+    ".zip",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".html",
+    ".txt",
+    ".eml",
+}
+ALLOWED_MIME_BY_EXTENSION = {
+    ".pdf": {"application/pdf"},
+    ".docx": {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/zip",
+        "application/octet-stream",
+    },
+    ".xlsx": {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/zip",
+        "application/octet-stream",
+    },
+    ".zip": {"application/zip", "application/x-zip-compressed", "application/octet-stream"},
+    ".png": {"image/png", "application/octet-stream"},
+    ".jpg": {"image/jpeg", "application/octet-stream"},
+    ".jpeg": {"image/jpeg", "application/octet-stream"},
+    ".html": {"text/html", "application/octet-stream"},
+    ".txt": {"text/plain", "application/octet-stream"},
+    ".eml": {"message/rfc822", "application/octet-stream", "text/plain"},
+}
+FILE_TYPE_BY_EXTENSION = {
+    ".pdf": "document",
+    ".docx": "document",
+    ".xlsx": "spreadsheet",
+    ".zip": "archive",
+    ".png": "image",
+    ".jpg": "image",
+    ".jpeg": "image",
+    ".html": "web",
+    ".txt": "text",
+    ".eml": "email",
+}
 
 
 @app.on_event("startup")
@@ -424,6 +477,31 @@ def _serialize_investigation_detail(investigation: Investigation) -> dict:
     return detail
 
 
+def _sanitize_filename(name: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", (name or "").strip())
+    return cleaned[:200] or "evidence"
+
+
+def _validate_evidence_upload(filename: str, mime_type: str, file_size: int) -> tuple[str, str]:
+    original = _sanitize_filename(filename)
+    ext = os.path.splitext(original.lower())[1]
+    if ext not in ALLOWED_EVIDENCE_EXTENSIONS:
+        raise HTTPException(status_code=422, detail="Unsupported evidence file type")
+
+    if file_size <= 0:
+        raise HTTPException(status_code=422, detail="Uploaded file is empty")
+
+    if file_size > MAX_EVIDENCE_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File too large (max {MAX_EVIDENCE_FILE_SIZE} bytes)")
+
+    allowed_mimes = ALLOWED_MIME_BY_EXTENSION.get(ext, set())
+    lowered_mime = (mime_type or "").lower().strip()
+    if lowered_mime and allowed_mimes and lowered_mime not in allowed_mimes:
+        raise HTTPException(status_code=422, detail="Uploaded file MIME type does not match extension")
+
+    return original, ext
+
+
 # ─────────────────────────────────────────────
 #  ROUTES
 # ─────────────────────────────────────────────
@@ -513,6 +591,18 @@ def dashboard_summary(current_user: User = Depends(get_current_user)):
     return database_module.get_dashboard_summary(
         organization_id=current_user.organization_id,
         user_id=current_user.id,
+    )
+
+
+@app.get("/dashboard/analytics")
+def dashboard_analytics(
+    days: int = 30,
+    current_user: User = Depends(get_current_user),
+):
+    """Return executive dashboard analytics in a single API payload."""
+    return database_module.get_dashboard_analytics(
+        organization_id=current_user.organization_id,
+        days=days,
     )
 
 
@@ -897,6 +987,158 @@ def investigation_activity(
             raise HTTPException(status_code=404, detail="Investigation not found")
         events = database_module.get_timeline_events(investigation.id, order=order, limit=limit, offset=offset)
         return {"case_id": case_id, "activity": events}
+
+
+@app.post("/investigations/{case_id}/evidence")
+async def upload_investigation_evidence(
+    case_id: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_min_role(ROLE_ANALYST)),
+):
+    """Upload a validated evidence artifact for an investigation."""
+    if not file.filename:
+        raise HTTPException(status_code=422, detail="File name is required")
+
+    guessed_mime = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
+    received_mime = (file.content_type or guessed_mime).lower().strip()
+
+    content = await file.read(MAX_EVIDENCE_FILE_SIZE + 1)
+    if len(content) > MAX_EVIDENCE_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File too large (max {MAX_EVIDENCE_FILE_SIZE} bytes)")
+
+    original_filename, ext = _validate_evidence_upload(file.filename, received_mime, len(content))
+    evidence_id = str(uuid.uuid4())
+    stored_filename = f"{evidence_id}{ext}"
+    sha256 = hashlib.sha256(content).hexdigest()
+    stored_path = None
+
+    with database_module.SessionLocal() as db:
+        investigation = _investigation_query_for_user(db, case_id, current_user).first()
+        if not investigation:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+
+        try:
+            stored_path = storage_backend.save_bytes(
+                case_id=investigation.case_id,
+                filename=stored_filename,
+                data=content,
+            )
+
+            evidence = database_module.append_evidence_record(
+                investigation,
+                evidence_id=evidence_id,
+                filename=stored_filename,
+                original_filename=original_filename,
+                file_type=FILE_TYPE_BY_EXTENSION.get(ext, "unknown"),
+                mime_type=received_mime,
+                file_size=len(content),
+                sha256=sha256,
+                uploaded_by=current_user.id,
+                session=db,
+            )
+
+            try:
+                database_module.append_timeline_event(
+                    investigation.id,
+                    event_type="evidence_uploaded",
+                    title="Evidence uploaded",
+                    description=f"Evidence {original_filename} uploaded.",
+                    source="analyst",
+                    metadata={
+                        "evidence_id": evidence_id,
+                        "filename": original_filename,
+                        "sha256": sha256,
+                        "file_size": len(content),
+                    },
+                    session=db,
+                )
+            except Exception:
+                pass
+
+            return evidence
+        except HTTPException:
+            if stored_path is not None:
+                storage_backend.delete(case_id=investigation.case_id, filename=stored_filename)
+            raise
+        except Exception:
+            if stored_path is not None:
+                storage_backend.delete(case_id=investigation.case_id, filename=stored_filename)
+            raise HTTPException(status_code=500, detail="Evidence upload failed")
+
+
+@app.get("/investigations/{case_id}/evidence")
+def list_investigation_evidence(case_id: str, current_user: User = Depends(get_current_user)):
+    """List evidence metadata for an investigation."""
+    with database_module.SessionLocal() as db:
+        investigation = _investigation_query_for_user(db, case_id, current_user).first()
+        if not investigation:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+        items = database_module.list_evidence_records(investigation.id, session=db)
+        return {"case_id": case_id, "items": items}
+
+
+@app.get("/investigations/{case_id}/evidence/{evidence_id}/download")
+def download_investigation_evidence(
+    case_id: str,
+    evidence_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Download a stored evidence artifact for an investigation."""
+    with database_module.SessionLocal() as db:
+        investigation = _investigation_query_for_user(db, case_id, current_user).first()
+        if not investigation:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+
+        evidence = database_module.get_evidence_record(investigation.id, evidence_id, session=db)
+        if not evidence:
+            raise HTTPException(status_code=404, detail="Evidence not found")
+
+        file_path = storage_backend.get_path(case_id=investigation.case_id, filename=evidence.filename)
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Evidence file is unavailable")
+
+        return FileResponse(
+            str(file_path),
+            media_type=evidence.mime_type or "application/octet-stream",
+            filename=evidence.original_filename,
+        )
+
+
+@app.delete("/investigations/{case_id}/evidence/{evidence_id}")
+def delete_investigation_evidence(
+    case_id: str,
+    evidence_id: str,
+    current_user: User = Depends(require_min_role(ROLE_ANALYST)),
+):
+    """Delete an evidence artifact and its metadata."""
+    with database_module.SessionLocal() as db:
+        investigation = _investigation_query_for_user(db, case_id, current_user).first()
+        if not investigation:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+
+        evidence = database_module.get_evidence_record(investigation.id, evidence_id, session=db)
+        if not evidence:
+            raise HTTPException(status_code=404, detail="Evidence not found")
+
+        original_filename = evidence.original_filename
+        stored_filename = evidence.filename
+        storage_backend.delete(case_id=investigation.case_id, filename=stored_filename)
+        database_module.delete_evidence_record(evidence, session=db)
+
+        try:
+            database_module.append_timeline_event(
+                investigation.id,
+                event_type="evidence_deleted",
+                title="Evidence deleted",
+                description=f"Evidence {original_filename} deleted.",
+                source="analyst",
+                metadata={"evidence_id": evidence_id, "filename": original_filename},
+                session=db,
+            )
+        except Exception:
+            pass
+
+        return {"deleted": True, "evidence_id": evidence_id, "case_id": case_id}
 
 
 @app.post("/investigations/{case_id}/chat")

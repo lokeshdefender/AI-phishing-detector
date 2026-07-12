@@ -20,6 +20,47 @@
       </nav>
     </header>
 
+    <section class="history-card" id="executiveDashboardSection">
+      <div class="history-toolbar">
+        <h2>Organization Dashboard</h2>
+        <div id="analyticsSummary" class="results-summary">Loading analytics...</div>
+      </div>
+
+      <div class="analytics-kpi-grid" id="analyticsKpis">
+        <article class="widget-card"><h3>Total Investigations</h3><p id="kpiTotalInvestigations" class="widget-value">0</p></article>
+        <article class="widget-card"><h3>Open Cases</h3><p id="kpiOpenCases" class="widget-value">0</p></article>
+        <article class="widget-card"><h3>Closed Cases</h3><p id="kpiClosedCases" class="widget-value">0</p></article>
+        <article class="widget-card"><h3>High Risk Cases</h3><p id="kpiHighRiskCases" class="widget-value">0</p></article>
+        <article class="widget-card"><h3>Medium Risk Cases</h3><p id="kpiMediumRiskCases" class="widget-value">0</p></article>
+        <article class="widget-card"><h3>Low Risk Cases</h3><p id="kpiLowRiskCases" class="widget-value">0</p></article>
+        <article class="widget-card"><h3>Created Today</h3><p id="kpiCreatedToday" class="widget-value">0</p></article>
+        <article class="widget-card"><h3>Created This Week</h3><p id="kpiCreatedThisWeek" class="widget-value">0</p></article>
+      </div>
+
+      <div class="analytics-charts-grid">
+        <article class="widget-card analytics-chart-card">
+          <h3>Cases by Threat Level</h3>
+          <div id="chartThreatLevels" class="analytics-bars"></div>
+        </article>
+        <article class="widget-card analytics-chart-card">
+          <h3>Cases over Time (Last 30 Days)</h3>
+          <div id="chartCasesOverTime" class="analytics-line-bars"></div>
+        </article>
+        <article class="widget-card analytics-chart-card">
+          <h3>Top IOC Types</h3>
+          <ul id="chartTopIocTypes" class="analytics-list"></ul>
+        </article>
+        <article class="widget-card analytics-chart-card">
+          <h3>Top MITRE Techniques</h3>
+          <ul id="chartTopMitreTechniques" class="analytics-list"></ul>
+        </article>
+        <article class="widget-card analytics-chart-card analytics-chart-wide">
+          <h3>Top Targeted Domains</h3>
+          <ul id="chartTopDomains" class="analytics-list"></ul>
+        </article>
+      </div>
+    </section>
+
     <section class="history-card">
       <div class="dashboard-widgets" id="dashboardWidgets">
         <article class="widget-card">

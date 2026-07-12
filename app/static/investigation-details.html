@@ -175,6 +175,38 @@
         <ul id="urlList"></ul>
       </div>
 
+      <div class="report-section" id="evidenceSection">
+        <h3>Evidence Repository</h3>
+        <div id="evidenceDropZone" class="drop-zone">
+          <p>Drag and drop evidence file here or click to browse</p>
+          <input type="file" id="evidenceFileInput" hidden />
+        </div>
+        <div class="controls">
+          <button type="button" id="evidenceUploadBtn">Upload Evidence</button>
+        </div>
+        <p id="evidenceStatus" class="subtitle">Upload PDF, DOCX, XLSX, ZIP, PNG, JPG, HTML, TXT, or EML.</p>
+
+        <div class="table-wrapper">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Type</th>
+                <th>Size</th>
+                <th>Uploaded</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="evidenceBody"></tbody>
+          </table>
+        </div>
+
+        <div class="evidence-metadata" id="evidenceMetadata">
+          <h4>Evidence Metadata</h4>
+          <pre id="evidenceMetadataContent">Select an evidence item to inspect metadata.</pre>
+        </div>
+      </div>
+
       <div class="report-section">
         <h3>Analyst Report</h3>
         <pre id="analystReportContent">Loading…</pre>
