@@ -51,6 +51,15 @@ button:active{transform:translateY(1px)}
 .history-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 .history-toolbar input{min-width:280px;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:inherit}
 .results-summary{color:var(--muted);font-size:0.95rem}
+.history-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.filter-chip{padding:6px 12px;border-radius:999px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:#cbd5e1;cursor:pointer}
+.filter-chip.active{background:rgba(79,70,229,0.24);border-color:rgba(79,70,229,0.42);color:#e2e8ff}
+.dashboard-widgets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.widget-card{padding:12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08)}
+.widget-card h3{margin:0 0 8px 0;font-size:0.9rem;color:#cbd5e1}
+.widget-value{margin:0;font-size:1.7rem;font-weight:700;color:#e2e8ff}
+.widget-activity-list{margin:0;padding-left:18px;max-height:120px;overflow:auto}
+.widget-activity-list li{margin-bottom:4px;color:#cbd5e1;font-size:0.84rem}
 .table-wrapper{overflow-x:auto}
 .history-table{width:100%;border-collapse:collapse}
 .history-table th,.history-table td{padding:10px 12px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.08);font-size:0.95rem}
@@ -140,6 +149,13 @@ footer{margin-top:18px;color:var(--muted);text-align:center}
 .copilot-form{display:flex;flex-direction:column;gap:8px}
 .copilot-form textarea{min-height:100px}
 .copilot-actions-row{display:flex;gap:8px;flex-wrap:wrap}
+.comments-container{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto}
+.comment-item{padding:10px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08)}
+.comment-item p{margin:6px 0 0 0;white-space:pre-wrap}
+.comment-meta{font-size:0.84rem;color:#cbd5e1}
+.comment-form{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.comment-form textarea{min-height:90px}
+.activity-container{display:flex;flex-direction:column;gap:8px}
 
 /* MITRE mapping table evidence styling */
 .mitre-evidence-item{padding:4px 6px;margin:4px 0;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);font-size:0.82rem;color:#cbd5e1}
@@ -147,6 +163,10 @@ footer{margin-top:18px;color:var(--muted);text-align:center}
 @media (max-width:1180px){
 	.details-layout{grid-template-columns:1fr}
 	.copilot-panel{position:static;max-height:none}
+}
+
+@media (max-width:920px){
+	.dashboard-widgets{grid-template-columns:1fr}
 }
 
 .auth-container{max-width:520px}

@@ -55,3 +55,18 @@ def test_cross_org_case_access_is_denied(tmp_path, monkeypatch):
 
     graph = org_b_client.get(f"/investigations/{case_id}/graph")
     assert graph.status_code == 404
+
+    comments = org_b_client.get(f"/investigations/{case_id}/comments")
+    assert comments.status_code == 404
+
+    add_comment = org_b_client.post(
+        f"/investigations/{case_id}/comments",
+        json={"message": "Cross-org note"},
+    )
+    assert add_comment.status_code == 404
+
+    assignment = org_b_client.patch(
+        f"/investigations/{case_id}/assignment",
+        json={"assigned_user_id": None},
+    )
+    assert assignment.status_code == 404

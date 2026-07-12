@@ -11,6 +11,7 @@ from .models_db import (
     Base,
     Investigation,
     InvestigationChatMessage,
+    InvestigationComment,
     InvestigationTimeline,
     Organization,
     ThreatIntelCache,
@@ -50,6 +51,9 @@ def _ensure_schema_columns(engine: Engine) -> None:
         "evidence": "ALTER TABLE investigations ADD COLUMN evidence TEXT DEFAULT '[]'",
         "mitre_mappings": "ALTER TABLE investigations ADD COLUMN mitre_mappings TEXT DEFAULT '{}'",
         "assigned_to": "ALTER TABLE investigations ADD COLUMN assigned_to VARCHAR(255) DEFAULT ''",
+        "assigned_user_id": "ALTER TABLE investigations ADD COLUMN assigned_user_id INTEGER",
+        "assigned_at": "ALTER TABLE investigations ADD COLUMN assigned_at DATETIME",
+        "assigned_by": "ALTER TABLE investigations ADD COLUMN assigned_by INTEGER",
         "tags": "ALTER TABLE investigations ADD COLUMN tags TEXT DEFAULT '[]'",
     }
 
@@ -286,6 +290,141 @@ def create_investigation_record(
     return investigation
 
 
+def list_organization_users(db: Session, organization_id: int) -> list[User]:
+    """Return active users for an organization ordered by name/email."""
+    users = (
+        db.query(User)
+        .filter(User.organization_id == organization_id)
+        .filter(User.is_active == 1)
+        .order_by(User.full_name.asc(), User.email.asc())
+        .all()
+    )
+    return users
+
+
+def append_comment(
+    investigation: Investigation,
+    *,
+    author_id: int,
+    message: str,
+    session: Session,
+    comment_id: str | None = None,
+) -> dict:
+    """Persist a collaboration comment for an investigation."""
+    import uuid as _uuid
+
+    cid = comment_id or str(_uuid.uuid4())
+    record = InvestigationComment(
+        comment_id=cid,
+        case_id=investigation.case_id,
+        investigation_id=investigation.id,
+        author_id=author_id,
+        message=message,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+
+    author = session.query(User).filter(User.id == record.author_id).first()
+    return {
+        "comment_id": record.comment_id,
+        "case_id": record.case_id,
+        "author_id": record.author_id,
+        "author_name": (author.full_name or author.email) if author else "Unknown",
+        "message": record.message,
+        "timestamp": record.created_at.isoformat() if record.created_at else None,
+    }
+
+
+def get_comments(
+    investigation_id: int,
+    *,
+    order: str = "asc",
+    limit: int | None = None,
+    offset: int | None = None,
+) -> List[dict]:
+    """Return comments for an investigation."""
+    with SessionLocal() as session:
+        q = (
+            session.query(InvestigationComment)
+            .filter(InvestigationComment.investigation_id == investigation_id)
+        )
+
+        if order == "desc":
+            q = q.order_by(InvestigationComment.created_at.desc(), InvestigationComment.id.desc())
+        else:
+            q = q.order_by(InvestigationComment.created_at.asc(), InvestigationComment.id.asc())
+
+        if offset:
+            q = q.offset(offset)
+        if limit:
+            q = q.limit(limit)
+
+        comments = q.all()
+        results = []
+        for comment in comments:
+            author = session.query(User).filter(User.id == comment.author_id).first()
+            results.append(
+                {
+                    "comment_id": comment.comment_id,
+                    "case_id": comment.case_id,
+                    "author_id": comment.author_id,
+                    "author_name": (author.full_name or author.email) if author else "Unknown",
+                    "message": comment.message,
+                    "timestamp": comment.created_at.isoformat() if comment.created_at else None,
+                }
+            )
+    return results
+
+
+def get_dashboard_summary(*, organization_id: int, user_id: int, recent_limit: int = 10) -> dict:
+    """Return collaboration dashboard counters and recent activity."""
+    with SessionLocal() as session:
+        my_open_cases = (
+            session.query(Investigation)
+            .filter(Investigation.organization_id == organization_id)
+            .filter(Investigation.creator_user_id == user_id)
+            .filter(Investigation.status != "Closed")
+            .count()
+        )
+        assigned_to_me = (
+            session.query(Investigation)
+            .filter(Investigation.organization_id == organization_id)
+            .filter(Investigation.assigned_user_id == user_id)
+            .count()
+        )
+
+        events = (
+            session.query(InvestigationTimeline, Investigation.case_id)
+            .join(Investigation, Investigation.id == InvestigationTimeline.investigation_id)
+            .filter(Investigation.organization_id == organization_id)
+            .order_by(InvestigationTimeline.created_at.desc(), InvestigationTimeline.id.desc())
+            .limit(recent_limit)
+            .all()
+        )
+
+        recent_activity = []
+        for event, case_id in events:
+            recent_activity.append(
+                {
+                    "event_id": event.event_id,
+                    "case_id": case_id,
+                    "event_type": event.event_type,
+                    "title": event.title,
+                    "description": event.description,
+                    "source": event.source,
+                    "metadata": json.loads(event.metadata_json) if event.metadata_json else None,
+                    "timestamp": event.created_at.isoformat() if event.created_at else None,
+                }
+            )
+
+        return {
+            "my_open_cases": my_open_cases,
+            "assigned_to_me": assigned_to_me,
+            "recent_team_activity": recent_activity,
+        }
+
+
 def append_timeline_event(
     investigation_id: int,
     *,
@@ -376,35 +515,37 @@ def append_timeline_event(
 
 def get_timeline_events(investigation_id: int, order: str = "desc", limit: int | None = None, offset: int | None = None) -> List[dict]:
     """Retrieve timeline events for an investigation."""
-    q = (
-        SessionLocal()
-        .query(InvestigationTimeline)
-        .filter(InvestigationTimeline.investigation_id == investigation_id)
-    )
-    if order == "asc":
-        q = q.order_by(InvestigationTimeline.created_at.asc(), InvestigationTimeline.id.asc())
-    else:
-        q = q.order_by(InvestigationTimeline.created_at.desc(), InvestigationTimeline.id.desc())
-    if offset:
-        q = q.offset(offset)
-    if limit:
-        q = q.limit(limit)
-
-    results = []
-    for ev in q.all():
-        results.append(
-            {
-                "event_id": ev.event_id,
-                "investigation_id": ev.investigation_id,
-                "event_type": ev.event_type,
-                "title": ev.title,
-                "description": ev.description,
-                "source": ev.source,
-                "metadata": json.loads(ev.metadata_json) if ev.metadata_json else None,
-                "timestamp": ev.created_at.isoformat() if ev.created_at else None,
-            }
+    with SessionLocal() as session:
+        q = (
+            session.query(InvestigationTimeline, Investigation.case_id)
+            .join(Investigation, Investigation.id == InvestigationTimeline.investigation_id)
+            .filter(InvestigationTimeline.investigation_id == investigation_id)
         )
-    return results
+        if order == "asc":
+            q = q.order_by(InvestigationTimeline.created_at.asc(), InvestigationTimeline.id.asc())
+        else:
+            q = q.order_by(InvestigationTimeline.created_at.desc(), InvestigationTimeline.id.desc())
+        if offset:
+            q = q.offset(offset)
+        if limit:
+            q = q.limit(limit)
+
+        results = []
+        for ev, case_id in q.all():
+            results.append(
+                {
+                    "event_id": ev.event_id,
+                    "case_id": case_id,
+                    "investigation_id": ev.investigation_id,
+                    "event_type": ev.event_type,
+                    "title": ev.title,
+                    "description": ev.description,
+                    "source": ev.source,
+                    "metadata": json.loads(ev.metadata_json) if ev.metadata_json else None,
+                    "timestamp": ev.created_at.isoformat() if ev.created_at else None,
+                }
+            )
+        return results
 
 
 def append_chat_message(

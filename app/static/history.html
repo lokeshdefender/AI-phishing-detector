@@ -21,9 +21,34 @@
     </header>
 
     <section class="history-card">
+      <div class="dashboard-widgets" id="dashboardWidgets">
+        <article class="widget-card">
+          <h3>My Open Cases</h3>
+          <p id="widgetMyOpen" class="widget-value">0</p>
+        </article>
+        <article class="widget-card">
+          <h3>Cases Assigned To Me</h3>
+          <p id="widgetAssigned" class="widget-value">0</p>
+        </article>
+        <article class="widget-card widget-activity">
+          <h3>Recent Team Activity</h3>
+          <ul id="widgetActivityList" class="widget-activity-list">
+            <li class="empty-state">Loading activity...</li>
+          </ul>
+        </article>
+      </div>
       <div class="history-toolbar">
         <input id="searchInput" type="search" placeholder="Search by case ID, sender, status, threat level..." />
         <div id="resultsSummary" class="results-summary">Loading investigations…</div>
+      </div>
+      <div id="historyFilters" class="history-filters" role="group" aria-label="Investigation filters">
+        <button type="button" class="filter-chip active" data-filter="">All</button>
+        <button type="button" class="filter-chip" data-filter="my_investigations">My Investigations</button>
+        <button type="button" class="filter-chip" data-filter="assigned_to_me">Assigned To Me</button>
+        <button type="button" class="filter-chip" data-filter="open">Open</button>
+        <button type="button" class="filter-chip" data-filter="closed">Closed</button>
+        <button type="button" class="filter-chip" data-filter="high_risk">High Risk</button>
+        <button type="button" class="filter-chip" data-filter="unassigned">Unassigned</button>
       </div>
       <div class="table-wrapper">
         <table class="history-table">

@@ -45,7 +45,19 @@ class User(Base):
     )
 
     organization: Mapped[Organization] = relationship(back_populates="users")
-    investigations: Mapped[list["Investigation"]] = relationship(back_populates="creator")
+    investigations: Mapped[list["Investigation"]] = relationship(
+        back_populates="creator",
+        foreign_keys="Investigation.creator_user_id",
+    )
+    assigned_investigations: Mapped[list["Investigation"]] = relationship(
+        back_populates="assigned_user",
+        foreign_keys="Investigation.assigned_user_id",
+    )
+    assignment_changes: Mapped[list["Investigation"]] = relationship(
+        back_populates="assigned_by_user",
+        foreign_keys="Investigation.assigned_by",
+    )
+    comments: Mapped[list["InvestigationComment"]] = relationship(back_populates="author")
 
 
 class Investigation(Base):
@@ -74,6 +86,9 @@ class Investigation(Base):
     evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default="[]")
     mitre_mappings: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default="{}")
     assigned_to: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, default="")
+    assigned_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
+    assigned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    assigned_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
     tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default="[]")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="Open")
     created_at: Mapped[datetime] = mapped_column(
@@ -96,7 +111,22 @@ class Investigation(Base):
         cascade="all, delete-orphan",
     )
     organization: Mapped[Optional[Organization]] = relationship(back_populates="investigations")
-    creator: Mapped[Optional[User]] = relationship(back_populates="investigations")
+    creator: Mapped[Optional[User]] = relationship(
+        back_populates="investigations",
+        foreign_keys=[creator_user_id],
+    )
+    assigned_user: Mapped[Optional[User]] = relationship(
+        back_populates="assigned_investigations",
+        foreign_keys=[assigned_user_id],
+    )
+    assigned_by_user: Mapped[Optional[User]] = relationship(
+        back_populates="assignment_changes",
+        foreign_keys=[assigned_by],
+    )
+    comments: Mapped[list["InvestigationComment"]] = relationship(
+        back_populates="investigation",
+        cascade="all, delete-orphan",
+    )
 
 
 class ThreatIntelIndicator(Base):
@@ -174,4 +204,23 @@ class InvestigationChatMessage(Base):
     )
 
     investigation: Mapped[Investigation] = relationship(back_populates="chat_messages")
+
+
+class InvestigationComment(Base):
+    """Collaboration comment message for a single investigation."""
+
+    __tablename__ = "investigation_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    comment_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, index=True)
+    case_id: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    investigation_id: Mapped[int] = mapped_column(ForeignKey("investigations.id"), index=True, nullable=False)
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    investigation: Mapped[Investigation] = relationship(back_populates="comments")
+    author: Mapped[User] = relationship(back_populates="comments")
 

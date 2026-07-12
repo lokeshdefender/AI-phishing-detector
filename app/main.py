@@ -86,6 +86,24 @@ class InvestigationUpdateRequest(BaseModel):
     urls: Optional[list[str]] = None
 
 
+class InvestigationAssignmentRequest(BaseModel):
+    assigned_user_id: Optional[int] = None
+
+
+class InvestigationCommentRequest(BaseModel):
+    message: str
+
+    @field_validator("message")
+    @classmethod
+    def validate_message(cls, v):
+        value = (v or "").strip()
+        if not value:
+            raise ValueError("message is required")
+        if len(value) > 10_000:
+            raise ValueError("message too large (max 10KB)")
+        return value
+
+
 class InvestigateRequest(BaseModel):
     input_text: str
     source_type: Optional[str] = None
@@ -269,6 +287,9 @@ def _serialize_investigation(investigation: Investigation) -> dict:
         "created_at": created_at,
         "organization_id": investigation.organization_id,
         "creator_user_id": investigation.creator_user_id,
+        "assigned_user_id": investigation.assigned_user_id,
+        "assigned_at": investigation.assigned_at.isoformat() if investigation.assigned_at else None,
+        "assigned_by": investigation.assigned_by,
     }
 
 
@@ -387,6 +408,9 @@ def _serialize_investigation_detail(investigation: Investigation) -> dict:
             "summary": investigation.summary or "",
             "evidence": _coerce_json_list(investigation.evidence),
             "assigned_to": investigation.assigned_to or "",
+            "assigned_user_id": investigation.assigned_user_id,
+            "assigned_at": investigation.assigned_at.isoformat() if investigation.assigned_at else None,
+            "assigned_by": investigation.assigned_by,
             "tags": _coerce_json_list(investigation.tags),
             "updated_at": investigation.updated_at.isoformat() if investigation.updated_at else "",
         }
@@ -459,6 +483,33 @@ def me(current_user: User = Depends(get_current_user)):
     return {"user": auth_module.serialize_user(current_user)}
 
 
+@app.get("/users")
+def list_users(current_user: User = Depends(get_current_user)):
+    """List active users in the current organization for assignment workflows."""
+    with database_module.SessionLocal() as db:
+        users = database_module.list_organization_users(db, current_user.organization_id)
+        return {
+            "users": [
+                {
+                    "id": user.id,
+                    "email": user.email,
+                    "full_name": user.full_name or "",
+                    "role": (user.role or "viewer").lower(),
+                }
+                for user in users
+            ]
+        }
+
+
+@app.get("/dashboard/summary")
+def dashboard_summary(current_user: User = Depends(get_current_user)):
+    """Return collaboration dashboard metrics for the signed-in user."""
+    return database_module.get_dashboard_summary(
+        organization_id=current_user.organization_id,
+        user_id=current_user.id,
+    )
+
+
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest, current_user: User = Depends(require_min_role(ROLE_ANALYST))):
     """Analyze pasted email text and return URLs, risk score and explanations."""
@@ -520,10 +571,13 @@ async def analyze_eml(
 
 
 @app.get("/investigations")
-def list_investigations(current_user: User = Depends(get_current_user)):
+def list_investigations(
+    filter_by: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+):
     """Return investigation history sorted newest-first."""
     with database_module.SessionLocal() as db:
-        investigations = (
+        query = (
             db.query(Investigation)
             .filter(
                 or_(
@@ -531,9 +585,23 @@ def list_investigations(current_user: User = Depends(get_current_user)):
                     Investigation.organization_id.is_(None),
                 )
             )
-            .order_by(Investigation.created_at.desc(), Investigation.id.desc())
-            .all()
         )
+
+        selected_filter = (filter_by or "").strip().lower()
+        if selected_filter == "my_investigations":
+            query = query.filter(Investigation.creator_user_id == current_user.id)
+        elif selected_filter == "assigned_to_me":
+            query = query.filter(Investigation.assigned_user_id == current_user.id)
+        elif selected_filter == "open":
+            query = query.filter(Investigation.status != "Closed")
+        elif selected_filter == "closed":
+            query = query.filter(Investigation.status == "Closed")
+        elif selected_filter == "high_risk":
+            query = query.filter(Investigation.threat_level.in_(["HIGH", "CRITICAL"]))
+        elif selected_filter == "unassigned":
+            query = query.filter(Investigation.assigned_user_id.is_(None))
+
+        investigations = query.order_by(Investigation.created_at.desc(), Investigation.id.desc()).all()
         return [_serialize_investigation(item) for item in investigations]
 
 
@@ -664,6 +732,139 @@ def add_timeline_event(
             return ev
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.patch("/investigations/{case_id}/assignment")
+def update_assignment(
+    case_id: str,
+    payload: InvestigationAssignmentRequest,
+    current_user: User = Depends(require_min_role(ROLE_ANALYST)),
+):
+    """Assign or unassign an investigation to an organization user."""
+    with database_module.SessionLocal() as db:
+        investigation = _investigation_query_for_user(db, case_id, current_user).first()
+        if not investigation:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+
+        target_user = None
+        target_id = payload.assigned_user_id
+        if target_id is not None:
+            target_user = db.query(User).filter(User.id == target_id).first()
+            if not target_user or target_user.organization_id != current_user.organization_id:
+                raise HTTPException(status_code=404, detail="Assignee not found")
+
+        previous_assignee = investigation.assigned_user_id
+
+        investigation.assigned_user_id = target_user.id if target_user else None
+        investigation.assigned_to = (target_user.full_name or target_user.email) if target_user else ""
+        investigation.assigned_by = current_user.id if target_user else None
+        investigation.assigned_at = datetime.now(timezone.utc) if target_user else None
+        investigation.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(investigation)
+
+        try:
+            database_module.append_timeline_event(
+                investigation.id,
+                event_type="assignment_changed",
+                title="Assignment changed",
+                description=(
+                    f"Assigned to {(target_user.full_name or target_user.email)}"
+                    if target_user
+                    else "Case unassigned"
+                ),
+                source="analyst",
+                metadata={
+                    "from": previous_assignee,
+                    "to": investigation.assigned_user_id,
+                    "changed_by": current_user.id,
+                },
+                session=db,
+            )
+        except Exception:
+            pass
+
+        return {
+            "case_id": investigation.case_id,
+            "assigned_user_id": investigation.assigned_user_id,
+            "assigned_to": investigation.assigned_to,
+            "assigned_at": investigation.assigned_at.isoformat() if investigation.assigned_at else None,
+            "assigned_by": investigation.assigned_by,
+        }
+
+
+@app.get("/investigations/{case_id}/comments")
+def list_comments(
+    case_id: str,
+    order: str = "asc",
+    limit: int | None = None,
+    offset: int | None = None,
+    current_user: User = Depends(get_current_user),
+):
+    """Return collaboration comments for an investigation."""
+    with database_module.SessionLocal() as db:
+        investigation = _investigation_query_for_user(db, case_id, current_user).first()
+        if not investigation:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+        comments = database_module.get_comments(
+            investigation.id,
+            order=order,
+            limit=limit,
+            offset=offset,
+        )
+        return {"case_id": case_id, "comments": comments}
+
+
+@app.post("/investigations/{case_id}/comments")
+def add_comment(
+    case_id: str,
+    payload: InvestigationCommentRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Add collaboration comment to an investigation."""
+    with database_module.SessionLocal() as db:
+        investigation = _investigation_query_for_user(db, case_id, current_user).first()
+        if not investigation:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+
+        comment = database_module.append_comment(
+            investigation,
+            author_id=current_user.id,
+            message=payload.message.strip(),
+            session=db,
+        )
+
+        try:
+            database_module.append_timeline_event(
+                investigation.id,
+                event_type="comment_added",
+                title="Comment added",
+                description=payload.message.strip()[:200],
+                source="analyst",
+                metadata={"author_id": current_user.id, "comment_id": comment["comment_id"]},
+                session=db,
+            )
+        except Exception:
+            pass
+
+        return comment
+
+
+@app.get("/investigations/{case_id}/activity")
+def investigation_activity(
+    case_id: str,
+    order: str = "desc",
+    limit: int | None = None,
+    offset: int | None = None,
+    current_user: User = Depends(get_current_user),
+):
+    """Return collaboration activity log for an investigation."""
+    with database_module.SessionLocal() as db:
+        investigation = _investigation_query_for_user(db, case_id, current_user).first()
+        if not investigation:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+        events = database_module.get_timeline_events(investigation.id, order=order, limit=limit, offset=offset)
+        return {"case_id": case_id, "activity": events}
 
 
 @app.post("/investigations/{case_id}/chat")
@@ -824,7 +1025,7 @@ def update_investigation(
                     title="Status changed",
                     description=f"Status changed from {orig_status} to {payload.status}",
                     source="analyst",
-                    metadata={"from": orig_status, "to": payload.status},
+                    metadata={"from": orig_status, "to": payload.status, "changed_by": current_user.email},
                     session=db,
                 )
                 # if closed, also emit investigation_closed
@@ -851,7 +1052,7 @@ def update_investigation(
                     title="Analyst notes updated" if event_type == "analyst_note_updated" else "Analyst notes added",
                     description=(payload.analyst_notes or ""),
                     source="analyst",
-                    metadata={},
+                    metadata={"changed_by": current_user.email},
                     session=db,
                 )
         except Exception:

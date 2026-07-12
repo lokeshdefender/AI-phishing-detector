@@ -67,7 +67,9 @@
           </label>
           <label>
             Assigned to
-            <input id="assignedToInput" type="text" placeholder="Analyst name" />
+            <select id="assignedUserInput">
+              <option value="">Unassigned</option>
+            </select>
           </label>
         </div>
         <div class="case-form-grid">
@@ -181,6 +183,25 @@
       <div class="report-section">
         <h3>Analyst Notes</h3>
         <pre id="analystNotesContent">No analyst notes recorded.</pre>
+      </div>
+
+      <div class="report-section">
+        <h3>Collaboration Comments</h3>
+        <div id="commentsContainer" class="comments-container">
+          <p class="subtitle">Loading comments...</p>
+        </div>
+        <form id="commentForm" class="comment-form">
+          <label for="commentInput">Add comment</label>
+          <textarea id="commentInput" placeholder="Share investigation updates with your team."></textarea>
+          <div class="controls">
+            <button type="submit">Post Comment</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="report-section">
+        <h3>Activity Log</h3>
+        <div id="activityContainer" class="activity-container">Loading activity...</div>
       </div>
     </section>
 

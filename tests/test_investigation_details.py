@@ -86,3 +86,6 @@ def test_investigation_details_html_includes_copilot_panel(tmp_path, monkeypatch
     assert "id=\"copilotHistory\"" in body
     assert "Summarize Investigation" in body
     assert "Generate Technical Summary" in body
+    assert "Collaboration Comments" in body
+    assert "Activity Log" in body
+    assert "id=\"assignedUserInput\"" in body

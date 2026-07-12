@@ -56,3 +56,4 @@ def test_timeline_api_endpoints(tmp_path, monkeypatch):
     resp3 = client.get(f"/investigations/{case_id}/timeline")
     items = resp3.json()
     assert any(i["event_type"] == "manual_note" for i in items)
+    assert all("case_id" in i for i in items)

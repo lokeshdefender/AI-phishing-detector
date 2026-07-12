@@ -1,6 +1,12 @@
 const searchInput = document.getElementById('searchInput');
 const historyBody = document.getElementById('historyBody');
 const resultsSummary = document.getElementById('resultsSummary');
+const historyFilters = document.getElementById('historyFilters');
+const widgetMyOpen = document.getElementById('widgetMyOpen');
+const widgetAssigned = document.getElementById('widgetAssigned');
+const widgetActivityList = document.getElementById('widgetActivityList');
+
+let selectedFilter = '';
 
 ensureAuthenticated();
 bindLogoutButton();
@@ -35,12 +41,42 @@ function buildRow(item) {
 
 async function loadInvestigations() {
   try {
-    const response = await authApiFetch('/investigations');
+    const suffix = selectedFilter ? `?filter_by=${encodeURIComponent(selectedFilter)}` : '';
+    const response = await authApiFetch(`/investigations${suffix}`);
     const data = await response.json();
     renderItems(data);
   } catch (error) {
     historyBody.innerHTML = `<tr><td colspan="6" class="empty-state">Unable to load investigations right now.</td></tr>`;
     resultsSummary.textContent = 'Unable to load investigations';
+  }
+}
+
+function renderDashboard(summary) {
+  if (!summary) return;
+  widgetMyOpen.textContent = summary.my_open_cases ?? 0;
+  widgetAssigned.textContent = summary.assigned_to_me ?? 0;
+
+  const activity = Array.isArray(summary.recent_team_activity) ? summary.recent_team_activity : [];
+  widgetActivityList.innerHTML = '';
+  if (!activity.length) {
+    widgetActivityList.innerHTML = '<li class="empty-state">No team activity yet.</li>';
+    return;
+  }
+
+  activity.slice(0, 6).forEach((item) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<strong>${item.case_id || 'Case'}</strong> ${item.title || item.event_type || 'activity'}`;
+    widgetActivityList.appendChild(li);
+  });
+}
+
+async function loadDashboard() {
+  try {
+    const response = await authApiFetch('/dashboard/summary');
+    const data = await response.json();
+    renderDashboard(data);
+  } catch (error) {
+    widgetActivityList.innerHTML = '<li class="empty-state">Unable to load team activity.</li>';
   }
 }
 
@@ -69,4 +105,16 @@ searchInput.addEventListener('input', () => {
   loadInvestigations().catch(() => {});
 });
 
+if (historyFilters) {
+  historyFilters.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-filter]');
+    if (!button) return;
+    selectedFilter = button.dataset.filter || '';
+    historyFilters.querySelectorAll('.filter-chip').forEach((chip) => chip.classList.remove('active'));
+    button.classList.add('active');
+    loadInvestigations().catch(() => {});
+  });
+}
+
 loadInvestigations();
+loadDashboard();

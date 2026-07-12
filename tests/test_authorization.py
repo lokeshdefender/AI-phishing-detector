@@ -58,6 +58,12 @@ def test_viewer_cannot_run_investigation_or_patch_case(tmp_path, monkeypatch):
     )
     assert blocked_patch.status_code == 403
 
+    blocked_assignment = viewer_client.patch(
+        f"/investigations/{case_id}/assignment",
+        json={"assigned_user_id": None},
+    )
+    assert blocked_assignment.status_code == 403
+
 
 def test_analyst_can_update_case(tmp_path, monkeypatch):
     database_module, main_module = _boot(tmp_path, monkeypatch)
@@ -80,3 +86,32 @@ def test_analyst_can_update_case(tmp_path, monkeypatch):
     payload = update_case.json()
     assert payload["status"] == "Escalated"
     assert payload["analyst_notes"] == "Escalated for response"
+
+
+def test_viewer_can_add_comment_but_cannot_assign(tmp_path, monkeypatch):
+    _, main_module = _boot(tmp_path, monkeypatch)
+
+    admin_client = TestClient(main_module.app)
+    _register(admin_client, "admin2@example.com", "admin")
+
+    created = admin_client.post(
+        "/investigate",
+        json={"input_text": "Collaborative case for role checks"},
+    )
+    assert created.status_code == 200
+    case_id = created.json()["case_id"]
+
+    viewer_client = TestClient(main_module.app)
+    _register(viewer_client, "viewer2@example.com", "viewer")
+
+    add_comment = viewer_client.post(
+        f"/investigations/{case_id}/comments",
+        json={"message": "Viewer note for awareness."},
+    )
+    assert add_comment.status_code == 200
+
+    blocked_assignment = viewer_client.patch(
+        f"/investigations/{case_id}/assignment",
+        json={"assigned_user_id": None},
+    )
+    assert blocked_assignment.status_code == 403

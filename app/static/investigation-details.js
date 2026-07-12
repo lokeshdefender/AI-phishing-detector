@@ -20,12 +20,16 @@ const caseUpdateForm = document.getElementById('caseUpdateForm');
 const titleInput = document.getElementById('titleInput');
 const statusInput = document.getElementById('statusInput');
 const threatInput = document.getElementById('threatInput');
-const assignedToInput = document.getElementById('assignedToInput');
+const assignedUserInput = document.getElementById('assignedUserInput');
 const summaryInput = document.getElementById('summaryInput');
 const notesInput = document.getElementById('notesInput');
 const tagsInput = document.getElementById('tagsInput');
 const evidenceInput = document.getElementById('evidenceInput');
 const saveStatus = document.getElementById('saveStatus');
+const commentsContainer = document.getElementById('commentsContainer');
+const commentForm = document.getElementById('commentForm');
+const commentInput = document.getElementById('commentInput');
+const activityContainer = document.getElementById('activityContainer');
 const graphStatus = document.getElementById('graphStatus');
 const graphNodeHint = document.getElementById('graphNodeHint');
 const graphNodeDetails = document.getElementById('graphNodeDetails');
@@ -45,6 +49,7 @@ const timelineContainer = document.getElementById('timelineContainer');
 let graphInstance = null;
 let lastAssistantMessage = '';
 let copilotMessagesCache = [];
+let currentUserId = null;
 
 ensureAuthenticated();
 bindLogoutButton();
@@ -141,6 +146,96 @@ function renderTimeline(items) {
     `;
     timelineContainer.appendChild(card);
   });
+}
+
+function renderActivity(items) {
+  if (!activityContainer) return;
+  if (!items || !items.length) {
+    activityContainer.textContent = 'No activity recorded for this case yet.';
+    return;
+  }
+
+  activityContainer.innerHTML = '';
+  items.forEach((item) => {
+    const card = document.createElement('div');
+    card.className = 'timeline-event';
+    const ts = item.timestamp ? new Date(item.timestamp).toLocaleString() : 'Unknown time';
+    card.innerHTML = `
+      <div class="event-icon">${(item.event_type || 'A').charAt(0).toUpperCase()}</div>
+      <div class="event-body">
+        <div class="event-meta"><strong>${item.title || item.event_type || 'Activity'}</strong> — <span class="muted">${ts}</span></div>
+        <div class="event-desc">${item.description || ''}</div>
+      </div>
+    `;
+    activityContainer.appendChild(card);
+  });
+}
+
+function renderComments(items) {
+  if (!commentsContainer) return;
+  if (!items || !items.length) {
+    commentsContainer.innerHTML = '<p class="subtitle">No comments yet.</p>';
+    return;
+  }
+
+  commentsContainer.innerHTML = '';
+  items.forEach((item) => {
+    const message = document.createElement('article');
+    message.className = 'comment-item';
+    const author = item.author_name || item.author_id || 'Unknown';
+    const ts = item.timestamp ? new Date(item.timestamp).toLocaleString() : 'Unknown time';
+    message.innerHTML = `
+      <div class="comment-meta"><strong>${author}</strong> <span class="muted">${ts}</span></div>
+      <p>${item.message || ''}</p>
+    `;
+    commentsContainer.appendChild(message);
+  });
+}
+
+async function loadAssignableUsers() {
+  if (!assignedUserInput) return;
+  try {
+    const response = await authApiFetch('/users', { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error('Unable to load users');
+    const data = await response.json();
+    const users = Array.isArray(data.users) ? data.users : [];
+    assignedUserInput.innerHTML = '<option value="">Unassigned</option>';
+    users.forEach((user) => {
+      const option = document.createElement('option');
+      option.value = String(user.id);
+      option.textContent = user.full_name ? `${user.full_name} (${user.email})` : user.email;
+      assignedUserInput.appendChild(option);
+    });
+  } catch (error) {
+    assignedUserInput.innerHTML = '<option value="">Unassigned</option>';
+  }
+}
+
+async function updateAssignment() {
+  if (!assignedUserInput) return;
+  const selected = assignedUserInput.value ? Number(assignedUserInput.value) : null;
+  const previous = currentCaseData ? (currentCaseData.assigned_user_id ?? null) : null;
+  if (selected === previous) return;
+
+  try {
+    const response = await authApiFetch(`/investigations/${currentCaseId}/assignment`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ assigned_user_id: selected }),
+    });
+    if (!response.ok) throw new Error('Unable to update assignment');
+    const payload = await response.json();
+    if (currentCaseData) {
+      currentCaseData.assigned_user_id = payload.assigned_user_id;
+      currentCaseData.assigned_to = payload.assigned_to;
+      currentCaseData.assigned_at = payload.assigned_at;
+      currentCaseData.assigned_by = payload.assigned_by;
+    }
+    saveStatus.textContent = 'Assignment updated.';
+    await loadActivity();
+  } catch (error) {
+    saveStatus.textContent = 'Unable to update assignment right now.';
+  }
 }
 
 function formatGraphNodeDetails(node) {
@@ -395,11 +490,50 @@ function populateForm(data) {
   titleInput.value = data.title || '';
   statusInput.value = data.status || 'Open';
   threatInput.value = (data.threat_level || 'MINIMAL').toUpperCase();
-  assignedToInput.value = data.assigned_to || '';
+  assignedUserInput.value = data.assigned_user_id != null ? String(data.assigned_user_id) : '';
   summaryInput.value = data.summary || '';
   notesInput.value = data.analyst_notes || '';
   tagsInput.value = parseList(data.tags).join(', ');
   evidenceInput.value = parseList(data.evidence).join('\n');
+}
+
+async function loadComments() {
+  if (!commentsContainer) return;
+  try {
+    const response = await authApiFetch(`/investigations/${currentCaseId}/comments?order=asc&limit=500`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) throw new Error('Comments unavailable');
+    const data = await response.json();
+    renderComments(data.comments || []);
+  } catch (error) {
+    commentsContainer.innerHTML = '<p class="subtitle">Unable to load comments.</p>';
+  }
+}
+
+async function loadActivity() {
+  if (!activityContainer) return;
+  try {
+    const response = await authApiFetch(`/investigations/${currentCaseId}/activity?order=desc&limit=100`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) throw new Error('Activity unavailable');
+    const data = await response.json();
+    renderActivity(data.activity || []);
+  } catch (error) {
+    activityContainer.textContent = 'Unable to load activity log.';
+  }
+}
+
+async function loadCurrentUser() {
+  try {
+    const response = await authApiFetch('/me', { headers: { Accept: 'application/json' } });
+    if (!response.ok) return;
+    const data = await response.json();
+    currentUserId = data && data.user ? data.user.id : null;
+  } catch (error) {
+    currentUserId = null;
+  }
 }
 
 function renderThreatIntel(items) {
@@ -580,7 +714,6 @@ caseUpdateForm.addEventListener('submit', async (event) => {
     threat_level: threatInput.value || undefined,
     summary: summaryInput.value.trim() || undefined,
     analyst_notes: notesInput.value.trim() || undefined,
-    assigned_to: assignedToInput.value.trim() || undefined,
     tags: tagsInput.value
       .split(',')
       .map((entry) => entry.trim())
@@ -607,6 +740,8 @@ caseUpdateForm.addEventListener('submit', async (event) => {
 
     const data = await response.json();
     renderCase(data);
+    await updateAssignment();
+    await loadActivity();
     saveStatus.textContent = 'Saved.';
   } catch (error) {
     saveStatus.textContent = 'Unable to save changes right now.';
@@ -685,6 +820,29 @@ if (copyLastResponseBtn) {
   });
 }
 
+if (commentForm) {
+  commentForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const message = (commentInput.value || '').trim();
+    if (!message) return;
+    try {
+      const response = await authApiFetch(`/investigations/${currentCaseId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+      if (!response.ok) throw new Error('Unable to post comment');
+      commentInput.value = '';
+      await loadComments();
+      await loadActivity();
+    } catch (error) {
+      saveStatus.textContent = 'Unable to add comment right now.';
+    }
+  });
+}
+
+loadCurrentUser();
+loadAssignableUsers();
 loadInvestigation();
 loadThreatIntel();
 setInterval(() => {
@@ -694,6 +852,8 @@ loadTimeline();
 setInterval(() => {
   loadTimeline();
 }, 5000);
+loadComments();
+loadActivity();
 loadRelationshipGraph();
 setInterval(() => {
   loadRelationshipGraph();
