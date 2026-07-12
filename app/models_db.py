@@ -9,6 +9,45 @@ class Base(DeclarativeBase):
     """Base class for all SQLAlchemy ORM models."""
 
 
+class Organization(Base):
+    """Tenant organization that owns users and investigations."""
+
+    __tablename__ = "organizations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    users: Mapped[list["User"]] = relationship(back_populates="organization")
+    investigations: Mapped[list["Investigation"]] = relationship(back_populates="organization")
+
+
+class User(Base):
+    """Authenticated platform user belonging to an organization."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="viewer")
+    is_active: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    organization: Mapped[Organization] = relationship(back_populates="users")
+    investigations: Mapped[list["Investigation"]] = relationship(back_populates="creator")
+
+
 class Investigation(Base):
     """Persisted phishing investigation case record."""
 
@@ -16,6 +55,8 @@ class Investigation(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     case_id: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
+    organization_id: Mapped[Optional[int]] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
+    creator_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="Phishing Investigation")
     submitted_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     sender: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -31,6 +72,7 @@ class Investigation(Base):
     graph: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default="[]")
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default="")
     evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default="[]")
+    mitre_mappings: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default="{}")
     assigned_to: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, default="")
     tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default="[]")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="Open")
@@ -49,6 +91,12 @@ class Investigation(Base):
         back_populates="investigation",
         cascade="all, delete-orphan",
     )
+    chat_messages: Mapped[list["InvestigationChatMessage"]] = relationship(
+        back_populates="investigation",
+        cascade="all, delete-orphan",
+    )
+    organization: Mapped[Optional[Organization]] = relationship(back_populates="investigations")
+    creator: Mapped[Optional[User]] = relationship(back_populates="investigations")
 
 
 class ThreatIntelIndicator(Base):
@@ -90,3 +138,40 @@ class ThreatIntelCache(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
+
+
+class InvestigationTimeline(Base):
+    """Immutable audit trail events for investigations."""
+
+    __tablename__ = "investigation_timeline"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    event_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, index=True)
+    investigation_id: Mapped[int] = mapped_column(ForeignKey("investigations.id"), index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    metadata_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+
+class InvestigationChatMessage(Base):
+    """Persisted copilot chat messages scoped to a single investigation."""
+
+    __tablename__ = "investigation_chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    message_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, index=True)
+    case_id: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
+    investigation_id: Mapped[int] = mapped_column(ForeignKey("investigations.id"), index=True, nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    investigation: Mapped[Investigation] = relationship(back_populates="chat_messages")
+

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Register | Phishing Analyzer</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="container auth-container">
+    <section class="auth-card">
+      <h1>Create account</h1>
+      <p class="subtitle">Set up a user and organization workspace.</p>
+      <form id="registerForm" class="ioc-form">
+        <label for="fullNameInput">Full name</label>
+        <input id="fullNameInput" type="text" placeholder="Security Analyst" />
+
+        <label for="organizationInput">Organization</label>
+        <input id="organizationInput" type="text" placeholder="Acme Security" required />
+
+        <label for="emailInput">Email</label>
+        <input id="emailInput" type="email" placeholder="analyst@company.com" required />
+
+        <label for="passwordInput">Password</label>
+        <input id="passwordInput" type="password" placeholder="At least 8 characters" required />
+
+        <label for="roleInput">Role</label>
+        <select id="roleInput">
+          <option value="viewer">Viewer</option>
+          <option value="analyst" selected>Analyst</option>
+          <option value="admin">Admin</option>
+        </select>
+
+        <div class="controls">
+          <button type="submit">Register</button>
+        </div>
+      </form>
+      <p id="registerStatus" class="form-status">Create your account to start investigating.</p>
+      <p class="subtitle">Already have an account? <a href="/login">Sign in</a></p>
+    </section>
+  </div>
+  <script src="/static/auth.js"></script>
+  <script>
+    const registerForm = document.getElementById('registerForm');
+    const registerStatus = document.getElementById('registerStatus');
+
+    registerForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      registerStatus.textContent = 'Creating account...';
+
+      const payload = {
+        full_name: document.getElementById('fullNameInput').value.trim() || null,
+        organization_name: document.getElementById('organizationInput').value.trim(),
+        email: document.getElementById('emailInput').value.trim(),
+        password: document.getElementById('passwordInput').value,
+        role: document.getElementById('roleInput').value,
+      };
+
+      try {
+        const response = await fetch('/register', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.detail || 'Registration failed');
+        }
+
+        window.location.href = '/';
+      } catch (error) {
+        registerStatus.textContent = error.message || 'Registration failed.';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import init_db
 from app.models_db import Investigation
+from tests.conftest import authenticate_client
 
 
 def test_database_initializes_investigations_table(tmp_path):
@@ -55,6 +56,7 @@ def test_analyze_endpoint_creates_investigation_record(tmp_path, monkeypatch):
     main_module = importlib.reload(main_module)
 
     client = TestClient(main_module.app)
+    authenticate_client(client)
     response = client.post(
         "/analyze",
         json={"email_text": "Please verify your account at https://example.com/login"},

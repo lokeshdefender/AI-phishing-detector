@@ -2,6 +2,9 @@ const searchInput = document.getElementById('searchInput');
 const historyBody = document.getElementById('historyBody');
 const resultsSummary = document.getElementById('resultsSummary');
 
+ensureAuthenticated();
+bindLogoutButton();
+
 function badgeClass(value) {
   return String(value || 'minimal').toLowerCase().replace(/\s+/g, '-');
 }
@@ -32,7 +35,7 @@ function buildRow(item) {
 
 async function loadInvestigations() {
   try {
-    const response = await fetch('/investigations');
+    const response = await authApiFetch('/investigations');
     const data = await response.json();
     renderItems(data);
   } catch (error) {

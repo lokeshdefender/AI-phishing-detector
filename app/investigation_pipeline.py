@@ -154,24 +154,34 @@ def _build_timeline(investigation_type: str, evidence: Dict[str, List[str]], enr
     return stage_messages
 
 
-def _build_graph(investigation_type: str, evidence: Dict[str, List[str]]) -> List[Dict[str, Any]]:
-    base_graph = [
-        {"source": "Input", "target": investigation_type.title()},
-        {"source": investigation_type.title(), "target": "Evidence"},
-        {"source": "Evidence", "target": "Threat Intelligence"},
-        {"source": "Threat Intelligence", "target": "Investigation"},
+def _build_graph(investigation_type: str, evidence: Dict[str, List[str]]) -> Dict[str, Any]:
+    nodes = {
+        "investigation": {"id": "investigation", "type": "Investigation", "label": "Investigation", "metadata": {}},
+        "input": {"id": "input", "type": "Input", "label": "Input", "metadata": {}},
+        "evidence": {"id": "evidence", "type": "Evidence", "label": "Evidence", "metadata": {}},
+        "threat_intel": {"id": "threat_intel", "type": "Threat Intelligence", "label": "Threat Intelligence", "metadata": {}},
+        "analysis_type": {"id": "analysis_type", "type": investigation_type.title(), "label": investigation_type.title(), "metadata": {}},
+    }
+    edges = [
+        {"source": "input", "target": "analysis_type", "relationship": "classified_as", "metadata": {}},
+        {"source": "analysis_type", "target": "evidence", "relationship": "produced", "metadata": {}},
+        {"source": "evidence", "target": "threat_intel", "relationship": "enriched_by", "metadata": {}},
+        {"source": "threat_intel", "target": "investigation", "relationship": "supports", "metadata": {}},
     ]
 
-    if evidence["ips"]:
-        base_graph.append({"source": "Evidence", "target": "IP"})
-    if evidence["domains"]:
-        base_graph.append({"source": "Evidence", "target": "Domain"})
-    if evidence["urls"]:
-        base_graph.append({"source": "Evidence", "target": "URL"})
-    if evidence["hashes"]:
-        base_graph.append({"source": "Evidence", "target": "Hash"})
+    def add_ioc_nodes(values: List[str], node_type: str, prefix: str) -> None:
+        for value in values:
+            node_id = f"{prefix}:{value.lower()}"
+            nodes[node_id] = {"id": node_id, "type": node_type, "label": value, "metadata": {}}
+            edges.append({"source": "investigation", "target": node_id, "relationship": "contains_indicator", "metadata": {"ioc_type": node_type}})
 
-    return base_graph
+    add_ioc_nodes(evidence["ips"], "IP Address", "ip")
+    add_ioc_nodes(evidence["domains"], "Domain", "domain")
+    add_ioc_nodes(evidence["urls"], "URL", "url")
+    add_ioc_nodes(evidence["hashes"], "File Hash", "hash")
+    add_ioc_nodes(evidence["emails"], "Email Address", "email")
+
+    return {"nodes": list(nodes.values()), "edges": edges, "metadata": {"source": "pipeline"}}
 
 
 def _build_summary(investigation_type: str, score: int, confidence: int, evidence: Dict[str, List[str]], enrichment_results: List[Dict[str, Any]], analyst_report: Optional[Dict[str, Any]] = None) -> str:
@@ -221,8 +231,38 @@ def process_investigation_input(input_text: str, *, source_type: Optional[str] =
     else:
         analysis_result = analyze_ioc(payload_text)
 
+    # Record phishing analysis completed event
+    try:
+        from . import database as database_module
+        database_module.append_timeline_event(
+            investigation_id=-1,  # placeholder; real record created later when persisted
+            event_type="phishing_analysis_completed",
+            title="Phishing analysis completed",
+            description=f"Analysis performed for input (type: {investigation_type}).",
+            source="system",
+            metadata={"investigation_type": investigation_type},
+        )
+    except Exception:
+        # non-fatal: timeline recording should not break pipeline
+        pass
+
     evidence = _extract_evidence(payload_text)
     enrichment_results = _build_enrichment_results(payload_text)
+
+    # Record IOC analysis completed if any IOCs were extracted
+    try:
+        from . import database as database_module
+        if enrichment_results:
+            database_module.append_timeline_event(
+                investigation_id=-1,
+                event_type="ioc_analysis_completed",
+                title="IOC analysis completed",
+                description=f"Extracted and enriched {len(enrichment_results)} IOC(s).",
+                source="system",
+                metadata={"ioc_count": len(enrichment_results)},
+            )
+    except Exception:
+        pass
 
     if investigation_type in {INVESTIGATION_TYPES["EMAIL"], INVESTIGATION_TYPES["SOC_ALERT"]}:
         score = analysis_result.get("score", 0)

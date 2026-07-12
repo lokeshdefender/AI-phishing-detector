@@ -5,6 +5,9 @@ const fileInput = el('fileInput');
 const dropZone = el('dropZone');
 let selectedFile = null;
 
+ensureAuthenticated();
+bindLogoutButton();
+
 // Tab switching
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -118,7 +121,7 @@ analyzeBtn.addEventListener('click', async () =>{
   analyzeBtn.disabled = true;
   analyzeBtn.textContent = 'Analyzing...';
   try{
-    const res = await fetch('/analyze', {
+    const res = await authApiFetch('/analyze', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({email_text: text})
@@ -176,7 +179,7 @@ analyzeFileBtn.addEventListener('click', async () => {
   try{
     const formData = new FormData();
     formData.append('file', selectedFile);
-    const res = await fetch('/analyze-eml', {
+    const res = await authApiFetch('/analyze-eml', {
       method: 'POST',
       body: formData
     });

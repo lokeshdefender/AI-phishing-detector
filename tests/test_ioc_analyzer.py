@@ -2,6 +2,8 @@ import importlib
 
 from fastapi.testclient import TestClient
 
+from tests.conftest import authenticate_client
+
 
 def test_ioc_analysis_endpoint_detects_type_and_persists_case(tmp_path, monkeypatch):
     db_path = tmp_path / "investigations.db"
@@ -15,6 +17,7 @@ def test_ioc_analysis_endpoint_detects_type_and_persists_case(tmp_path, monkeypa
     database_module.init_db(database_url=f"sqlite:///{db_path}")
 
     client = TestClient(main_module.app)
+    authenticate_client(client)
     response = client.post(
         "/ioc-analyze",
         json={"ioc_value": "8.8.8.8"},

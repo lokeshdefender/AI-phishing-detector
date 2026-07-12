@@ -2,6 +2,8 @@ import importlib
 
 from fastapi.testclient import TestClient
 
+from tests.conftest import authenticate_client
+
 
 def test_update_investigation_endpoint_updates_case_fields(tmp_path, monkeypatch):
     db_path = tmp_path / "investigations.db"
@@ -34,6 +36,7 @@ def test_update_investigation_endpoint_updates_case_fields(tmp_path, monkeypatch
         session.commit()
 
     client = TestClient(main_module.app)
+    authenticate_client(client)
     response = client.patch(
         "/investigations/CASE-000020",
         json={

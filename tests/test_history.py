@@ -3,6 +3,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from tests.conftest import authenticate_client
+
 
 def test_investigations_endpoint_returns_sorted_history(tmp_path, monkeypatch):
     db_path = tmp_path / "investigations.db"
@@ -49,6 +51,7 @@ def test_investigations_endpoint_returns_sorted_history(tmp_path, monkeypatch):
         session.commit()
 
     client = TestClient(main_module.app)
+    authenticate_client(client)
     response = client.get("/investigations")
 
     assert response.status_code == 200

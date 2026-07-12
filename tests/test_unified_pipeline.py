@@ -3,6 +3,8 @@ import json
 
 from fastapi.testclient import TestClient
 
+from tests.conftest import authenticate_client
+
 
 def test_investigate_endpoint_detects_input_and_persists_pipeline_context(tmp_path, monkeypatch):
     db_path = tmp_path / "investigations.db"
@@ -16,6 +18,7 @@ def test_investigate_endpoint_detects_input_and_persists_pipeline_context(tmp_pa
     database_module.init_db(database_url=f"sqlite:///{db_path}")
 
     client = TestClient(main_module.app)
+    authenticate_client(client)
     response = client.post(
         "/investigate",
         json={"input_text": "Urgent password reset required. Click https://evil.example/login and verify your account."},
@@ -64,6 +67,7 @@ def test_investigation_detail_endpoint_exposes_pipeline_fields(tmp_path, monkeyp
         session.commit()
 
     client = TestClient(main_module.app)
+    authenticate_client(client)
     response = client.get("/investigations/CASE-000040")
 
     assert response.status_code == 200

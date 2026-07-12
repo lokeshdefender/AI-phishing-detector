@@ -11,6 +11,9 @@ const enrichmentOutput = document.getElementById('enrichmentOutput');
 const iocCaseId = document.getElementById('iocCaseId');
 const caseIdBanner = document.getElementById('caseIdBanner');
 
+ensureAuthenticated();
+bindLogoutButton();
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const value = iocInput.value.trim();
@@ -21,7 +24,7 @@ form.addEventListener('submit', async (event) => {
 
   status.textContent = 'Analyzing IOC…';
   try {
-    const response = await fetch('/ioc-analyze', {
+    const response = await authApiFetch('/ioc-analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ioc_value: value }),

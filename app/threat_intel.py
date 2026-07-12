@@ -224,6 +224,7 @@ def process_investigation_enrichment(investigation_id: int) -> List[Dict[str, An
         if not iocs:
             return []
 
+        new_indicators = []
         for item in iocs:
             normalized = enrich_ioc(item["ioc_value"], item["ioc_type"])
             existing = (
@@ -249,6 +250,7 @@ def process_investigation_enrichment(investigation_id: int) -> List[Dict[str, An
                 provider_responses=json.dumps(normalized["provider_results"]),
             )
             session.add(indicator)
+            new_indicators.append(indicator)
 
         if not investigation.summary:
             top_indicator = max(
@@ -265,6 +267,48 @@ def process_investigation_enrichment(investigation_id: int) -> List[Dict[str, An
                 investigation.summary = top_indicator.detection_summary
 
         session.commit()
+
+        # Refresh the cached relationship graph after enrichment updates.
+        try:
+            from .investigation_graph import refresh_investigation_graph
+
+            refresh_investigation_graph(session, investigation, force=False)
+            session.commit()
+        except Exception:
+            pass
+
+        # Refresh cached MITRE ATT&CK mappings after enrichment updates.
+        try:
+            from .mitre_mapping import refresh_investigation_mitre
+
+            refresh_investigation_mitre(session, investigation, force=False)
+            session.commit()
+        except Exception:
+            pass
+
+        # append timeline event summarizing threat intelligence enrichment
+        try:
+            from . import database as database_module
+
+            providers_seen = set()
+            for ind in new_indicators:
+                try:
+                    pr = json.loads(ind.provider_responses or "{}")
+                    providers_seen.update(pr.keys())
+                except Exception:
+                    continue
+
+            database_module.append_timeline_event(
+                investigation.id,
+                event_type="threat_intel_lookup_completed",
+                title="Threat intelligence enrichment completed",
+                description=f"Enriched {len(new_indicators)} IOC(s) via providers: {', '.join(sorted(providers_seen)) or 'none'}.",
+                source="system",
+                metadata={"enriched_count": len(new_indicators), "providers": list(sorted(providers_seen))},
+                session=session,
+            )
+        except Exception:
+            pass
         return [
             {
                 "ioc_value": item["ioc_value"],

@@ -1,0 +1,57 @@
+import importlib
+
+from fastapi.testclient import TestClient
+
+
+def _boot(tmp_path, monkeypatch):
+    db_path = tmp_path / "multi_tenant.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+
+    import app.database as database_module
+    import app.main as main_module
+
+    database_module = importlib.reload(database_module)
+    main_module = importlib.reload(main_module)
+    database_module.init_db(database_url=f"sqlite:///{db_path}")
+    return database_module, main_module
+
+
+def _register(client, email, organization):
+    response = client.post(
+        "/register",
+        json={
+            "email": email,
+            "password": "Password123!",
+            "organization_name": organization,
+            "role": "analyst",
+            "full_name": email.split("@")[0],
+        },
+    )
+    assert response.status_code == 200
+
+
+def test_cross_org_case_access_is_denied(tmp_path, monkeypatch):
+    _, main_module = _boot(tmp_path, monkeypatch)
+
+    org_a_client = TestClient(main_module.app)
+    _register(org_a_client, "orga-analyst@example.com", "Org A")
+
+    create_case = org_a_client.post(
+        "/investigate",
+        json={"input_text": "Review suspicious reset link https://tenant-a-phish.test/login"},
+    )
+    assert create_case.status_code == 200
+    case_id = create_case.json()["case_id"]
+
+    org_b_client = TestClient(main_module.app)
+    _register(org_b_client, "orgb-analyst@example.com", "Org B")
+
+    list_cases = org_b_client.get("/investigations")
+    assert list_cases.status_code == 200
+    assert all(item["case_id"] != case_id for item in list_cases.json())
+
+    detail = org_b_client.get(f"/investigations/{case_id}")
+    assert detail.status_code == 404
+
+    graph = org_b_client.get(f"/investigations/{case_id}/graph")
+    assert graph.status_code == 404

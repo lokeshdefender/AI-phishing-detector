@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Login | Phishing Analyzer</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="container auth-container">
+    <section class="auth-card">
+      <h1>Sign in</h1>
+      <p class="subtitle">Access your organization investigations.</p>
+      <form id="loginForm" class="ioc-form">
+        <label for="emailInput">Email</label>
+        <input id="emailInput" type="email" placeholder="analyst@company.com" required />
+
+        <label for="passwordInput">Password</label>
+        <input id="passwordInput" type="password" placeholder="Enter password" required />
+
+        <div class="controls">
+          <button type="submit">Login</button>
+        </div>
+      </form>
+      <p id="loginStatus" class="form-status">Use your account credentials to continue.</p>
+      <p class="subtitle">No account yet? <a href="/register">Create one</a></p>
+    </section>
+  </div>
+  <script src="/static/auth.js"></script>
+  <script>
+    const loginForm = document.getElementById('loginForm');
+    const loginStatus = document.getElementById('loginStatus');
+
+    loginForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      loginStatus.textContent = 'Signing in...';
+
+      const email = document.getElementById('emailInput').value.trim();
+      const password = document.getElementById('passwordInput').value;
+
+      try {
+        const response = await fetch('/login', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.detail || 'Invalid credentials');
+        }
+
+        window.location.href = '/';
+      } catch (error) {
+        loginStatus.textContent = error.message || 'Login failed.';
+      }
+    });
+  </script>
+</body>
+</html>

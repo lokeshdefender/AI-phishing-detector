@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <div class="container">
+  <div class="container details-layout">
     <header>
       <div class="page-heading">
         <h1>Investigation Details</h1>
@@ -16,10 +16,11 @@
       <nav class="page-nav" aria-label="Primary">
         <a class="nav-link" href="/">Analyzer</a>
         <a class="nav-link" href="/history">History</a>
+        <button class="nav-link nav-button" id="logoutBtn" type="button">Logout</button>
       </nav>
     </header>
 
-    <section class="history-card">
+    <section class="history-card main-details-column">
       <div class="history-toolbar">
         <div>
           <h2 id="caseTitle">Loading case…</h2>
@@ -124,6 +125,44 @@
         </div>
       </div>
 
+      <div class="report-section" id="timelineSection">
+        <h3>Timeline</h3>
+        <div id="timelineContainer">Loading timeline…</div>
+      </div>
+
+      <div class="report-section" id="relationshipGraphSection">
+        <h3>Relationship Graph</h3>
+        <p id="graphStatus" class="subtitle">Loading investigation relationship graph.</p>
+        <div class="graph-layout">
+          <div id="relationshipGraph" class="graph-canvas" aria-label="Investigation relationship graph"></div>
+          <aside class="graph-details" id="graphDetailsPanel">
+            <h4>Node Details</h4>
+            <p id="graphNodeHint" class="subtitle">Select a node to inspect metadata.</p>
+            <pre id="graphNodeDetails">No node selected.</pre>
+          </aside>
+        </div>
+      </div>
+
+      <div class="report-section" id="mitreSection">
+        <h3>MITRE ATT&CK Mapping</h3>
+        <p id="mitreStatus" class="subtitle">Loading ATT&CK mappings for this investigation.</p>
+        <div class="table-wrapper">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>ATT&CK ID</th>
+                <th>Technique</th>
+                <th>Tactic</th>
+                <th>Confidence</th>
+                <th>Evidence Used</th>
+                <th>Explanation</th>
+              </tr>
+            </thead>
+            <tbody id="mitreBody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="report-section">
         <h3>Indicators</h3>
         <ul id="indicatorList"></ul>
@@ -144,8 +183,44 @@
         <pre id="analystNotesContent">No analyst notes recorded.</pre>
       </div>
     </section>
+
+    <aside class="history-card copilot-panel" id="copilotPanel">
+      <div class="history-toolbar">
+        <div>
+          <h3>AI Investigation Copilot</h3>
+          <p class="subtitle" id="copilotStatus">Grounded on this investigation only.</p>
+        </div>
+        <button type="button" id="clearCopilotBtn" class="secondary-btn">Clear</button>
+      </div>
+
+      <div class="copilot-quick-actions" id="copilotQuickActions">
+        <button type="button" data-action="summarize_investigation">Summarize Investigation</button>
+        <button type="button" data-action="explain_risk_score">Explain Risk Score</button>
+        <button type="button" data-action="explain_virustotal_findings">Explain VirusTotal Findings</button>
+        <button type="button" data-action="list_all_iocs">List All IOCs</button>
+        <button type="button" data-action="suggest_containment_actions">Suggest Containment Actions</button>
+        <button type="button" data-action="suggest_remediation_steps">Suggest Remediation Steps</button>
+        <button type="button" data-action="generate_executive_summary">Generate Executive Summary</button>
+        <button type="button" data-action="generate_technical_summary">Generate Technical Summary</button>
+      </div>
+
+      <div class="copilot-history" id="copilotHistory" aria-live="polite">
+        <p class="subtitle">Conversation history will appear here.</p>
+      </div>
+
+      <form id="copilotForm" class="copilot-form">
+        <label for="copilotInput">Ask about this investigation</label>
+        <textarea id="copilotInput" placeholder="Ask why risk is high, explain VirusTotal findings, list dangerous IOC, or request summaries."></textarea>
+        <div class="copilot-actions-row">
+          <button type="submit" id="copilotSendBtn">Send</button>
+          <button type="button" id="copyLastResponseBtn" class="secondary-btn">Copy Last Response</button>
+        </div>
+      </form>
+    </aside>
   </div>
 
+  <script src="https://unpkg.com/cytoscape@3.30.4/dist/cytoscape.min.js"></script>
+  <script src="/static/auth.js"></script>
   <script src="/static/investigation-details.js"></script>
 </body>
 </html>
