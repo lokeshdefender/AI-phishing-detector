@@ -39,6 +39,10 @@
           <p>Drag and drop .eml file here or click to browse</p>
           <input type="file" id="fileInput" accept=".eml" hidden />
         </div>
+        <div id="uploadProgress" class="upload-progress hidden" role="status" aria-live="polite">
+          <div class="progress-bar"><span id="uploadProgressBar" style="width:0%"></span></div>
+          <p id="uploadProgressText" class="subtitle">Waiting for upload.</p>
+        </div>
         <div class="controls">
           <button id="analyzeFileBtn">Analyze Uploaded File</button>
         </div>
@@ -48,9 +52,15 @@
         <div id="metadata" class="metadata hidden">
           <h3>Email Metadata</h3>
           <p><strong>From:</strong> <span id="metaSender"></span></p>
+          <p><strong>Recipients:</strong> <span id="metaRecipients"></span></p>
           <p><strong>Subject:</strong> <span id="metaSubject"></span></p>
+          <p><strong>Message ID:</strong> <span id="metaMessageId"></span></p>
+          <p><strong>Attachments:</strong> <span id="metaAttachmentCount"></span></p>
           <p><strong>Body Preview:</strong></p>
           <pre id="metaBody"></pre>
+        </div>
+        <div id="ingestionBanner" class="case-id-banner hidden">
+          <strong>Ingestion:</strong> <span id="ingestionBannerText">Email ingested and investigation created.</span>
         </div>
 
         <div class="score">

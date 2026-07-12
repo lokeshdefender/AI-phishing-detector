@@ -28,6 +28,10 @@ def test_investigation_model_can_be_persisted(tmp_path):
             title="Suspicious payment request",
             submitted_text="Please verify your password",
             sender="phisher@example.com",
+            subject="Important Update",
+            recipients='["soc@example.com"]',
+            message_id="<mid-123@example.com>",
+            attachment_count=2,
             urls="https://example.com/login",
             phishing_score=78,
             confidence=90,
@@ -43,6 +47,9 @@ def test_investigation_model_can_be_persisted(tmp_path):
 
     assert saved.title == "Suspicious payment request"
     assert saved.status == "Open"
+    assert saved.subject == "Important Update"
+    assert saved.message_id == "<mid-123@example.com>"
+    assert saved.attachment_count == 2
 
 
 def test_analyze_endpoint_creates_investigation_record(tmp_path, monkeypatch):

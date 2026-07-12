@@ -398,6 +398,12 @@ def _serialize_investigation_detail(investigation: Investigation) -> dict:
             "urls": _coerce_json_list(investigation.urls),
             "phishing_score": investigation.phishing_score,
             "confidence": investigation.confidence,
+            "email_metadata": {
+                "subject": investigation.subject or "",
+                "recipients": _coerce_json_list(investigation.recipients),
+                "message_id": investigation.message_id or "",
+                "attachment_count": int(investigation.attachment_count or 0),
+            },
             "analyst_report": investigation.analyst_report or "",
             "analyst_notes": investigation.analyst_notes or "",
             "investigation_type": investigation.investigation_type or "email",
@@ -541,6 +547,9 @@ async def analyze_eml(
 ):
     """Upload and analyze .eml email file."""
     try:
+        if not (file.filename or "").lower().endswith(".eml"):
+            raise HTTPException(status_code=422, detail="Only .eml files are supported")
+
         # File size limit: 1MB
         content = await file.read(1_000_000)
         if len(content) >= 1_000_000:
@@ -551,16 +560,39 @@ async def analyze_eml(
         if metadata.get("error"):
             raise HTTPException(status_code=422, detail=f"Could not parse .eml file: {metadata['error']}")
 
-        result = analyze_email(metadata["full_text"])
+        result = process_investigation_input(metadata["full_text"], source_type="email")
 
         result["metadata"] = {
             "sender": metadata["sender"],
             "subject": metadata["subject"],
+            "recipients": metadata.get("recipients") or [],
+            "message_id": metadata.get("message_id") or "",
+            "attachment_count": int(metadata.get("attachment_count") or 0),
+            "attachments": metadata.get("attachments") or [],
             "body_preview": metadata["body"][:200] + "..." if len(metadata["body"]) > 200 else metadata["body"],
         }
 
         case_id = _persist_analysis(metadata["full_text"], result, current_user)
         result["case_id"] = case_id
+
+        try:
+            with database_module.SessionLocal() as db:
+                investigation = _investigation_query_for_user(db, case_id, current_user).first()
+                if investigation:
+                    database_module.append_timeline_event(
+                        investigation.id,
+                        event_type="email_ingested",
+                        title="Email ingested",
+                        description=f"Uploaded email parsed and investigation {case_id} created.",
+                        source="system",
+                        metadata={
+                            "message_id": metadata.get("message_id") or "",
+                            "attachment_count": int(metadata.get("attachment_count") or 0),
+                        },
+                        session=db,
+                    )
+        except Exception:
+            pass
 
         return result
 

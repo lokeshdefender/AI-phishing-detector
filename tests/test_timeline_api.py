@@ -57,3 +57,39 @@ def test_timeline_api_endpoints(tmp_path, monkeypatch):
     items = resp3.json()
     assert any(i["event_type"] == "manual_note" for i in items)
     assert all("case_id" in i for i in items)
+
+
+def test_email_ingestion_adds_timeline_activity(tmp_path, monkeypatch):
+    db_path = tmp_path / "timeline_eml.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+
+    import app.database as database_module
+    import app.main as main_module
+    from tests.conftest import authenticate_client
+
+    database_module = importlib.reload(database_module)
+    main_module = importlib.reload(main_module)
+    database_module.init_db(database_url=f"sqlite:///{db_path}")
+
+    client = TestClient(main_module.app)
+    authenticate_client(client)
+
+    eml = b"""From: ingest@example.com
+To: team@example.com
+Subject: Ingestion Event
+Message-ID: <ingest-01@example.com>
+
+Body with https://example.com/login
+"""
+
+    response = client.post(
+        "/analyze-eml",
+        files={"file": ("ingest.eml", eml, "message/rfc822")},
+    )
+    assert response.status_code == 200
+    case_id = response.json()["case_id"]
+
+    timeline = client.get(f"/investigations/{case_id}/timeline")
+    assert timeline.status_code == 200
+    events = timeline.json()
+    assert any(ev["event_type"] == "email_ingested" for ev in events)

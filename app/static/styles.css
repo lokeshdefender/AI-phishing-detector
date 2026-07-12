@@ -20,6 +20,9 @@ textarea{width:100%;min-height:160px;padding:12px;border-radius:8px;border:1px s
 .drop-zone{width:100%;min-height:120px;border:2px dashed rgba(79,70,229,0.5);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(79,70,229,0.05);transition:all 0.2s}
 .drop-zone:hover,.drop-zone.dragover{border-color:var(--accent);background:rgba(79,70,229,0.1)}
 .drop-zone p{margin:0;text-align:center;color:var(--muted)}
+.upload-progress{margin-top:10px;padding:10px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08)}
+.progress-bar{height:10px;border-radius:999px;background:rgba(255,255,255,0.08);overflow:hidden}
+.progress-bar span{display:block;height:100%;background:linear-gradient(90deg,#4f46e5,#0ea5e9);transition:width .25s ease}
 .controls{display:flex;justify-content:flex-end;margin-top:8px;gap:8px}
 button{background:var(--accent);color:white;padding:10px 16px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
 button:active{transform:translateY(1px)}

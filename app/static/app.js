@@ -3,6 +3,9 @@ const analyzeBtn = el('analyzeBtn');
 const analyzeFileBtn = el('analyzeFileBtn');
 const fileInput = el('fileInput');
 const dropZone = el('dropZone');
+const uploadProgress = el('uploadProgress');
+const uploadProgressBar = el('uploadProgressBar');
+const uploadProgressText = el('uploadProgressText');
 let selectedFile = null;
 
 ensureAuthenticated();
@@ -104,11 +107,21 @@ function displayResult(data) {
   // metadata if present
   if(data.metadata){
     el('metaSender').textContent = data.metadata.sender || 'N/A';
+    const recipients = Array.isArray(data.metadata.recipients) ? data.metadata.recipients : [];
+    el('metaRecipients').textContent = recipients.length ? recipients.join(', ') : 'N/A';
     el('metaSubject').textContent = data.metadata.subject || 'N/A';
+    el('metaMessageId').textContent = data.metadata.message_id || 'N/A';
+    el('metaAttachmentCount').textContent = String(data.metadata.attachment_count ?? 0);
     el('metaBody').textContent = data.metadata.body_preview || 'N/A';
     el('metadata').classList.remove('hidden');
+
+    if (data.case_id) {
+      el('ingestionBannerText').textContent = `Email ingested successfully. Investigation ${data.case_id} created.`;
+      el('ingestionBanner').classList.remove('hidden');
+    }
   } else {
     el('metadata').classList.add('hidden');
+    el('ingestionBanner').classList.add('hidden');
   }
 
   el('result').classList.remove('hidden');
@@ -176,6 +189,9 @@ analyzeFileBtn.addEventListener('click', async () => {
   }
   analyzeFileBtn.disabled = true;
   analyzeFileBtn.textContent = 'Analyzing...';
+  uploadProgress.classList.remove('hidden');
+  uploadProgressBar.style.width = '15%';
+  uploadProgressText.textContent = 'Uploading email file...';
   try{
     const formData = new FormData();
     formData.append('file', selectedFile);
@@ -183,14 +199,20 @@ analyzeFileBtn.addEventListener('click', async () => {
       method: 'POST',
       body: formData
     });
+    uploadProgressBar.style.width = '70%';
+    uploadProgressText.textContent = 'Parsing and creating investigation...';
     const data = await res.json();
     if(data.error){
       alert('Error: ' + data.error);
     } else {
       displayResult(data);
+      uploadProgressBar.style.width = '100%';
+      uploadProgressText.textContent = 'Complete.';
     }
   }catch(e){
     alert('Analysis failed: '+e.message);
+    uploadProgressBar.style.width = '100%';
+    uploadProgressText.textContent = 'Upload failed.';
   }finally{
     analyzeFileBtn.disabled = false;
     analyzeFileBtn.textContent = 'Analyze Uploaded File';

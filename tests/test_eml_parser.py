@@ -7,12 +7,16 @@ def test_parse_simple_eml():
     eml_content = b"""From: test@example.com
 Subject: Test Email
 To: recipient@example.com
+Message-ID: <abc123@example.com>
 
 This is a test email body."""
     
     result = parse_eml_file(eml_content)
     assert result['sender'] == 'test@example.com'
     assert result['subject'] == 'Test Email'
+    assert result['message_id'] == '<abc123@example.com>'
+    assert result['recipients'] == ['recipient@example.com']
+    assert result['attachment_count'] == 0
     assert 'test email body' in result['body'].lower()
 
 
@@ -49,3 +53,32 @@ def test_parse_invalid_eml():
     result = parse_eml_file(eml_content)
     # Should not raise an error, but return empty/error
     assert 'error' not in result or len(result.get('sender', '')) >= 0
+
+
+def test_parse_eml_extracts_attachment_metadata():
+    eml_content = b"""From: sender@example.com
+To: analyst@example.com
+Subject: Invoice Attached
+Message-ID: <attachment-123@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mix-boundary"
+
+--mix-boundary
+Content-Type: text/plain
+
+Please review attachment.
+
+--mix-boundary
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="invoice.pdf"
+
+PDFCONTENT
+--mix-boundary--
+"""
+
+    result = parse_eml_file(eml_content)
+    assert result['attachment_count'] == 1
+    assert len(result['attachments']) == 1
+    assert result['attachments'][0]['filename'] == 'invoice.pdf'
+    assert result['attachments'][0]['content_type'] == 'application/pdf'
+    assert result['attachments'][0]['size'] > 0

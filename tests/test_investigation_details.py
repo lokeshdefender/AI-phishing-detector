@@ -23,6 +23,10 @@ def test_investigation_detail_endpoint_returns_case_data(tmp_path, monkeypatch):
                 title="Invoice lure",
                 submitted_text="Please review the invoice",
                 sender="billing@example.com",
+                subject="Quarterly invoice",
+                recipients='["finance@example.com"]',
+                message_id="<detail-10@example.com>",
+                attachment_count=1,
                 urls="https://example.com/invoice",
                 phishing_score=68,
                 confidence=80,
@@ -41,6 +45,9 @@ def test_investigation_detail_endpoint_returns_case_data(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert response.json()["case_id"] == "CASE-000010"
     assert response.json()["title"] == "Invoice lure"
+    assert response.json()["email_metadata"]["subject"] == "Quarterly invoice"
+    assert response.json()["email_metadata"]["message_id"] == "<detail-10@example.com>"
+    assert response.json()["email_metadata"]["attachment_count"] == 1
 
 
 def test_investigation_details_html_includes_copilot_panel(tmp_path, monkeypatch):
